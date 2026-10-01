@@ -77,4 +77,14 @@ write("tiny_scorer", "vqpaint-tiny-scorer", "vqpaint tiny scorer", nb("VQPAINT t
     CLIP_DL,
     '''f"{sys.executable} -u {REPO}/web/research/tiny/train_scorer.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --clip-vision {DATA}/vision_model.onnx --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json"''',
     "scorer", "/kaggle/input/**/vqpaint-tiny-scorer*/scorer/ckpt.pt"))
+TEXT_DL = CLIP_DL + '''ANN = f"{DATA}/annotations"
+if not os.path.exists(f"{ANN}/captions_train2017.json"):
+    sh(f"curl -sSL http://images.cocodataset.org/annotations/annotations_trainval2017.zip -o {TMP}/ann.zip && cd {DATA} && unzip -qo {TMP}/ann.zip annotations/captions_train2017.json annotations/captions_val2017.json && rm {TMP}/ann.zip")
+'''
+write("tiny_text", "vqpaint-tiny-text", "vqpaint tiny text", nb("VQPAINT tiny text encoder (distilled MobileCLIP-S0 text tower)",
+    "Small causal transformer that maps CLIP token ids to the MobileCLIP-S0 text embedding space, distilled on COCO captions, painting prompts, metaphors and synthetic notes. Output: `/kaggle/working/text/`.",
+    '''S = dict(HOURS=1.5, BATCH=256, VARIANTS="S:32,192,4,4;M:32,256,4,4", BRANCH="research/tiny-vqgan")''',
+    TEXT_DL,
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_text.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json --captions {DATA}/annotations"''',
+    "text", "/kaggle/input/**/vqpaint-tiny-text*/text/ckpt.pt"))
 print("notebooks written")

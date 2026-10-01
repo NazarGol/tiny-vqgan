@@ -3,7 +3,7 @@
 Everything the browser runs later is restricted to: embedding lookup, 3x3 conv (zero pad), ReLU, nearest 2x upsample,
 residual add, 1x1 conv, average pooling, so each module here maps to one WebGL2 fragment-shader pass.
 """
-import json, os, sys, struct, time
+import json, math, os, sys, struct, time
 import numpy as np, torch, torch.nn as nn, torch.nn.functional as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -279,3 +279,45 @@ def export_scorer(model, path_bin, path_json, meta=None):
 
 def to_u8(img):  # [3,H,W] float 0..1 -> HWC uint8
     return (img.clamp(0, 1).permute(1, 2, 0).cpu().numpy() * 255).round().astype(np.uint8)
+
+
+# ----------------------------------------------------------------------------- student text encoder (phase 3)
+class TextBlock(nn.Module):
+    def __init__(self, w, heads):
+        super().__init__(); self.ln1 = nn.LayerNorm(w); self.qkv = nn.Linear(w, 3 * w); self.proj = nn.Linear(w, w); self.ln2 = nn.LayerNorm(w)
+        self.fc1 = nn.Linear(w, 4 * w); self.fc2 = nn.Linear(4 * w, w); self.heads = heads
+    def forward(self, x, mask):
+        B, T, W = x.shape; h = self.heads
+        q, k, v = self.qkv(self.ln1(x)).reshape(B, T, 3, h, W // h).permute(2, 0, 3, 1, 4)
+        att = (q @ k.transpose(-1, -2)) / math.sqrt(W // h) + mask
+        x = x + self.proj((att.softmax(-1) @ v).transpose(1, 2).reshape(B, T, W))
+        return x + self.fc2(F.gelu(self.fc1(self.ln2(x)), approximate="tanh"))
+
+
+class TinyText(nn.Module):
+    """CLIP-style causal transformer: ids [B,77] (BOS … EOS, 0-padded) -> unit embedding [B,512], pooled at the EOS position (argmax id)."""
+    def __init__(self, vocab=49408, ctx=77, emb_dim=32, width=256, layers=4, heads=4, out_dim=512):
+        super().__init__(); self.cfg = dict(vocab=vocab, ctx=ctx, emb_dim=emb_dim, width=width, layers=layers, heads=heads, out_dim=out_dim)
+        self.tok = nn.Embedding(vocab, emb_dim); self.proj_in = nn.Linear(emb_dim, width); self.pos = nn.Parameter(torch.zeros(ctx, width))
+        self.blocks = nn.ModuleList([TextBlock(width, heads) for _ in range(layers)]); self.ln_f = nn.LayerNorm(width); self.out = nn.Linear(width, out_dim, bias=False)
+        nn.init.normal_(self.pos, std=0.01); nn.init.normal_(self.tok.weight, std=0.02)
+        self.register_buffer("mask", torch.full((ctx, ctx), float("-inf")).triu(1), persistent=False)
+    def forward(self, ids):
+        T = ids.shape[1]; x = self.proj_in(self.tok(ids)) + self.pos[:T]
+        for b in self.blocks: x = b(x, self.mask[:T, :T])
+        x = self.ln_f(x); pooled = x[torch.arange(x.shape[0]), ids.argmax(-1)]
+        return F.normalize(self.out(pooled), dim=-1)
+    def n_params(self): return sum(p.numel() for p in self.parameters())
+
+
+def export_text(model, path_bin, path_json, meta=None):
+    model = model.eval().cpu(); arrays, off, entries = [], 0, {}
+    def add(name, t):
+        nonlocal off; a = t.detach().float().reshape(-1).numpy().astype(np.float16); arrays.append(a); entries[name] = {"offset": off, "shape": list(t.shape)}; off += a.size
+    add("tok", model.tok.weight); add("proj_in.w", model.proj_in.weight); add("proj_in.b", model.proj_in.bias); add("pos", model.pos)
+    for i, b in enumerate(model.blocks):
+        for n, t in (("ln1.g", b.ln1.weight), ("ln1.b", b.ln1.bias), ("qkv.w", b.qkv.weight), ("qkv.b", b.qkv.bias), ("proj.w", b.proj.weight), ("proj.b", b.proj.bias),
+                     ("ln2.g", b.ln2.weight), ("ln2.b", b.ln2.bias), ("fc1.w", b.fc1.weight), ("fc1.b", b.fc1.bias), ("fc2.w", b.fc2.weight), ("fc2.b", b.fc2.bias)): add(f"b{i}.{n}", t)
+    add("ln_f.g", model.ln_f.weight); add("ln_f.b", model.ln_f.bias); add("out.w", model.out.weight)
+    data = np.concatenate(arrays); data.tofile(path_bin)
+    json.dump({"type": "tinytext", "dtype": "f16", **model.cfg, "tensors": entries, "elements": int(data.size), **(meta or {})}, open(path_json, "w"))
