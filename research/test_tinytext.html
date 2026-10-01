@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8"><title>tinytext test</title><body style="background:#404040;color:#eee;font:14px monospace"><pre id="log"></pre>
+<script type="module">
+import { TinyTextJS } from '../engine/text.js';
+import { CLIPTokenizer } from '../lib/clip_tokenizer.js';
+const q = new URLSearchParams(location.search), base = q.get('base') || './tiny/test/', variant = q.get('variant') || 'S';
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const res = { ok: false };
+try {
+  const t0 = performance.now();
+  const enc = await TinyTextJS.load(base + `tiny_text_${variant}.json`, base + `tiny_text_${variant}.bin`); res.loadMs = performance.now() - t0; res.weightMB = enc.weightBytes / 2 ** 20;
+  const ref = await (await fetch(base + `ref_text_${variant}.json`)).json(); res.cases = []; let worst = 1;
+  const tok = new CLIPTokenizer(await (await fetch('/models/mobileclip_s0/tokenizer.json')).json());
+  for (const c of ref.cases) {
+    const exp = new Float32Array(Uint8Array.from(atob(c.emb), (ch) => ch.charCodeAt(0)).buffer);
+    const jsIds = Array.from(tok.encode(c.text).ids); const sameIds = jsIds.every((v, i) => v === c.ids[i]);
+    const t1 = performance.now(); const e = enc.encode(c.ids); const ms = performance.now() - t1;
+    let d = 0; for (let i = 0; i < 512; i++) d += e[i] * exp[i]; worst = Math.min(worst, d);
+    res.cases.push({ text: c.text, cos: d, ms, sameIds }); log(`"${c.text.slice(0, 40)}": cos ${d.toFixed(6)} in ${ms.toFixed(1)} ms, tokenizer ids match: ${sameIds}`);
+  }
+  // worker round trip
+  const w = new Worker('../engine/text_worker.js', { type: 'module' }); const call = (msg) => new Promise((r) => { const id = Math.random(); const h = (ev) => { if (ev.data.id === id) { w.removeEventListener('message', h); r(ev.data); } }; w.addEventListener('message', h); w.postMessage({ id, ...msg }); });
+  const tw = performance.now(); await call({ init: { tokenizerJson: await (await fetch('/models/mobileclip_s0/tokenizer.json')).json(), jsonUrl: new URL(base + `tiny_text_${variant}.json`, location.href).href, binUrl: new URL(base + `tiny_text_${variant}.bin`, location.href).href } });
+  const r = await call({ texts: ['a red forest', 'the sea at night'] }); w.terminate(); res.workerMs = performance.now() - tw; res.workerEncodeMs = r.ms;
+  let d2 = 0; const e0 = enc.encode(tok.encode('a red forest').ids); for (let i = 0; i < 512; i++) d2 += r.embeddings[0][i] * e0[i]; res.workerCos = d2;
+  log(`worker: load+encode ${res.workerMs.toFixed(0)} ms (encode ${r.ms.toFixed(1)} ms), cos vs main ${d2.toFixed(6)}`);
+  res.ok = worst > 0.999 && res.cases.every((c) => c.sameIds) && d2 > 0.9999;
+} catch (e) { res.error = e.message + '\n' + e.stack; log('ERROR ' + e.message); console.error(e); }
+window.__result = res;
+</script></body>
