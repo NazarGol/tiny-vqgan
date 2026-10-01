@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><title>tinyscorer test</title><body style="background:#404040;color:#eee;font:14px monospace"><pre id="log"></pre>
+<script type="module">
+import { TinyScorerGL } from '../lib/tinyscorer.js';
+const q = new URLSearchParams(location.search), base = q.get('base') || './tiny/test/', variant = q.get('variant') || 'S', reps = +(q.get('reps') || 10);
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const res = { ok: false };
+try {
+  const t0 = performance.now();
+  const sc = await TinyScorerGL.load(base + `tiny_scorer_${variant}.json`, base + `tiny_scorer_${variant}.bin`);
+  res.loadMs = performance.now() - t0; res.weightMB = sc.weightBytes / 2 ** 20; res.renderer = sc.nn.renderer; res.extF = sc.nn.extF;
+  const ref = await (await fetch(base + `ref_scorer_${variant}.json`)).json();
+  const targets = new Float32Array(Uint8Array.from(atob(ref.targets), (c) => c.charCodeAt(0)).buffer);
+  sc.setTargets([targets.subarray(0, 512), targets.subarray(512, 1024)]);
+  res.cases = []; let worstScore = 0, worstCos = 1;
+  for (const c of ref.cases) {
+    const tokens = Int32Array.from(c.tokens), exp = new Float32Array(Uint8Array.from(atob(c.emb), (ch) => ch.charCodeAt(0)).buffer);
+    const scores = sc.score(tokens, c.S, c.n);
+    let maxErr = 0; for (let t = 0; t < 2; t++) for (let s = 0; s < c.n; s++) maxErr = Math.max(maxErr, Math.abs(scores[t * c.n + s] - c.scores[s][t]));
+    let minCos = 1;
+    if (sc.nn.extF) { const e = sc.embed(tokens, c.S, c.n); for (let s = 0; s < c.n; s++) { let d = 0; for (let i = 0; i < 512; i++) d += e[s * 512 + i] * exp[s * 512 + i]; minCos = Math.min(minCos, d); } }
+    res.cases.push({ S: c.S, n: c.n, maxScoreErr: maxErr, minCos }); worstScore = Math.max(worstScore, maxErr); worstCos = Math.min(worstCos, minCos);
+    log(`S=${c.S} n=${c.n}: max score err ${maxErr.toExponential(2)} min cos ${minCos.toFixed(5)}`);
+  }
+  res.timing = {};
+  for (const [S, B] of [[12, 1], [12, 16], [12, 64], [8, 64], [16, 64]]) {
+    const tok = new Int32Array(S * S * B); for (let i = 0; i < tok.length; i++) tok[i] = (i * 7919) % 16384;
+    sc.score(tok, S, B); sc.score(tok, S, B);
+    const t1 = performance.now(); for (let i = 0; i < reps; i++) sc.score(tok, S, B); const ms = (performance.now() - t1) / reps;
+    res.timing[`${S}x${B}`] = ms; log(`score ${B} grids of ${S}x${S}: ${ms.toFixed(2)} ms (${(B / ms * 1000).toFixed(0)} grids/s)`);
+  }
+  res.ok = worstScore < 2e-3 && worstCos > 0.999;
+} catch (e) { res.error = e.message; log('ERROR ' + e.message); console.error(e); }
+window.__result = res;
+</script></body>
