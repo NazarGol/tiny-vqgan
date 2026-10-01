@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>engine test</title><body style="background:#404040;color:#eee;font:14px monospace"><pre id="log"></pre><canvas id="cv" width="512" height="512" style="width:256px"></canvas>
+<script type="module">
+import { Engine } from '../engine/engine.js';
+import { noisyMask } from '../lib/mask.js';
+const q = new URLSearchParams(location.search), base = q.get('base') || './testmodels/', seconds = +(q.get('seconds') || 3), strokes = +(q.get('strokes') || 5), batch = +(q.get('batch') || 32);
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const res = { ok: false, strokes: [] };
+try {
+  const t0 = performance.now();
+  const eng = await Engine.load({ base, variant: q.get('variant') || 'A', scorer: q.get('scorer') || 'S', fetchBuf: (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.arrayBuffer(); }) });
+  res.loadMs = performance.now() - t0; res.renderer = eng.stats.renderer; res.weightMB = eng.stats.weightBytes / 2 ** 20;
+  log(`engine loaded in ${res.loadMs.toFixed(0)} ms on ${res.renderer}, bank ${eng.bank ? eng.bank.n : 'none'}`);
+  const grid = { w: 64, h: 64, tokens: new Int32Array(64 * 64).fill(6328) };
+  const target = new Float32Array(512); let n = 0; for (let i = 0; i < 512; i++) { target[i] = Math.sin(i * 12.9898) * 43758.5453 % 1; n += target[i] * target[i]; } for (let i = 0; i < 512; i++) target[i] /= Math.sqrt(n);
+  const g = document.getElementById('cv').getContext('2d');
+  for (let s = 0; s < strokes; s++) {
+    const size = 6 + (s % 3) * 3, x = 10 + (s * 7) % 30, y = 10 + (s * 11) % 30;
+    const mask = noisyMask({ cx: x + size / 2, cy: y + size / 2, radius: size / 2, gridW: grid.w, gridH: grid.h, seed: s });
+    const m = mask || { x, y, w: size, h: size, cells: new Uint8Array(size * size).fill(1) };
+    let previews = 0;
+    const r = await eng.paintStroke({ grid, mask: m, target, seconds, batch, onPreview: (p) => { previews++; const id = new ImageData(p.image.rgba, p.image.w, p.image.h); g.putImageData(id, p.crop.x * 4, p.crop.y * 4); } });
+    const line = { tries: r.steps, generations: r.generations, perSec: r.steps / r.elapsed, decodeMs: eng.decoder.stats.lastMs, scoreMs: eng.scorer.stats.lastMs, score: r.score, previews, crop: `${r.crop.w}x${r.crop.h}` };
+    res.strokes.push(line); log(`stroke ${s}: ${line.tries} tries (${line.perSec.toFixed(0)}/s, ${line.generations} gens) crop ${line.crop} decode ${line.decodeMs.toFixed(1)} ms score batch ${line.scoreMs.toFixed(1)} ms previews ${previews}`);
+  }
+  if (performance.memory) res.jsHeapMB = performance.memory.usedJSHeapSize / 2 ** 20;
+  res.texMB = eng.nn.texBytes / 2 ** 20;
+  res.ok = res.strokes.length === strokes && res.strokes.every((s) => s.tries > 0);
+} catch (e) { res.error = e.message + '\n' + e.stack; log('ERROR ' + e.message); console.error(e); }
+window.__result = res;
+</script></body>

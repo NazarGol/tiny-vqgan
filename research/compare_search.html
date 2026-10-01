@@ -1,0 +1,52 @@
+<!doctype html><meta charset="utf-8"><title>search comparison</title><body style="background:#404040;color:#eee;font:13px monospace"><pre id="log"></pre><canvas id="sheet"></canvas>
+<script type="module">
+// Real-CLIP search (ONNX decoder + MobileCLIP, lib/search.js) vs token-space search (engine) on the same prompts and masks.
+// Both results are decoded by the ORIGINAL decoder and scored by REAL CLIP; the tiny decoder's view of the token result is shown too.
+import { loadOrt, fetchCached, fetchJsonCached } from '../lib/models.js';
+import { Decoder } from '../lib/decoder.js';
+import { Clip, dot } from '../lib/clip.js';
+import { Palette } from '../lib/palette.js';
+import { Bank } from '../lib/bank.js';
+import { Painter } from '../lib/search.js';
+import { noisyMask } from '../lib/mask.js';
+import { resizeCHW } from '../lib/image.js';
+import { Engine } from '../engine/engine.js';
+const q = new URLSearchParams(location.search), M = q.get('models') || '/models/', base = q.get('base') || './testmodels/', seconds = +(q.get('seconds') || 8), nPrompts = +(q.get('n') || 10), batch = +(q.get('batch') || 32);
+const PROMPTS = ['a face', 'a red forest', 'the sea at night', 'a city street', 'green hills under a blue sky', 'a cat', 'a lighthouse in a storm', 'a bowl of oranges', 'snow on a mountain', 'a crowded market', 'deadline on Friday', 'a yellow bicycle', 'flowers in a vase', 'a dark room with one candle', 'waves crashing on rocks', 'coffee in the morning'];
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const res = { ok: false, rows: [] };
+try {
+  const ort = await loadOrt(q.get('ort') || '/node_modules/onnxruntime-web/dist/'); ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;
+  const decoder = await Decoder.create(ort, await fetchCached(M + 'decoder_fp16.onnx'), { ep: 'webgpu' });
+  const clip = await Clip.create(ort, { visionBuf: await fetchCached(M + 'mobileclip_s0/onnx/vision_model_fp16.onnx'), textBuf: await fetchCached(M + 'mobileclip_s0/onnx/text_model_fp16.onnx'), tokenizerJson: await fetchJsonCached(M + 'mobileclip_s0/tokenizer.json') });
+  const palette = await Palette.load(M + 'palette/'), bank = await Bank.load(M + (q.get('bank') || 'bank') + '/');
+  const painter = new Painter({ decoder, clip, palette, bank });
+  const eng = await Engine.load({ base, variant: q.get('variant') || 'A', scorer: q.get('scorer') || 'S', bank: q.get('bank') || 'bank', fetchBuf: (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.arrayBuffer(); }) });
+  log('loaded both stacks');
+  const realScore = async (tokens, crop, target) => { const img = await decoder.decode(tokens, crop.h, crop.w); const [e] = await clip.embedImages(resizeCHW(img.data, img.w, img.h, 256, 256), 1); return { score: dot(e, target), img }; };
+  const toCanvas = (img) => { const c = document.createElement('canvas'); c.width = img.w; c.height = img.h; const g = c.getContext('2d'); const id = g.createImageData(img.w, img.h); if (img.rgba) id.data.set(img.rgba); else { const n = img.w * img.h; for (let i = 0; i < n; i++) { id.data[i * 4] = img.data[i] * 255; id.data[i * 4 + 1] = img.data[n + i] * 255; id.data[i * 4 + 2] = img.data[2 * n + i] * 255; id.data[i * 4 + 3] = 255; } } g.putImageData(id, 0, 0); return c; };
+  const T = 192, sheet = document.getElementById('sheet'); sheet.width = 4 * T + 240; sheet.height = nPrompts * (T + 6) + 24; const sg = sheet.getContext('2d'); sg.fillStyle = '#404040'; sg.fillRect(0, 0, sheet.width, sheet.height);
+  sg.fillStyle = '#fff'; sg.font = '13px sans-serif'; sg.fillText('prompt', 4, 16); sg.fillText('real CLIP search (orig decoder)', 240, 16); sg.fillText('token search (orig decoder)', 240 + T + 4, 16); sg.fillText('token search (tiny decoder)', 240 + 2 * (T + 4), 16); sg.fillText('scorer view: real→token', 240 + 3 * (T + 4), 16);
+  // canvas: the first half of the prompts paint on blank, the second half over the previous stroke (painted canvas)
+  const gridA = { w: 64, h: 64, tokens: new Int32Array(64 * 64).fill(6328) }, gridB = { w: 64, h: 64, tokens: new Int32Array(64 * 64).fill(6328) };
+  for (let i = 0; i < nPrompts; i++) {
+    const prompt = PROMPTS[i % PROMPTS.length], target = await clip.embedText(prompt);
+    const radius = 3.5 + (i % 3), mask = noisyMask({ cx: 20 + (i % 2) * 6, cy: 20 + (i % 2) * 6, radius, gridW: 64, gridH: 64, seed: 100 + i });
+    const tA = performance.now(); const A = await painter.paint({ grid: gridA, mask, target, seconds, margin: 2 }); const secA = (performance.now() - tA) / 1000;
+    const tB = performance.now(); const B = await eng.paintStroke({ grid: gridB, mask, target, seconds, margin: 2, batch }); const secB = (performance.now() - tB) / 1000;
+    const rA = { score: A.score, img: A.image }, rB = await realScore(B.tokens, B.crop, target);
+    // the scorer's opinion of both results (square crops, via the engine's scorer): A's crop tokens are scored the same way
+    const side = Math.max(A.crop.w, A.crop.h), sqA = new Uint16Array(side * side).fill(6328); for (let y = 0; y < A.crop.h; y++) for (let x = 0; x < A.crop.w; x++) sqA[y * side + x] = A.tokens[y * A.crop.w + x];
+    eng.scorer.setTargets([target]); const scorerA = eng.scorer.score(sqA, side, 1)[0];
+    const row = { prompt, realA: rA.score, realB: rB.score, scorerB: B.score, scorerA, triesA: A.steps, triesB: B.steps, secA, secB, crop: `${B.crop.w}x${B.crop.h}` };
+    res.rows.push(row); log(`${prompt}: real CLIP  A=${rA.score.toFixed(4)} B=${rB.score.toFixed(4)} | scorer A=${scorerA.toFixed(4)} B=${B.score.toFixed(4)} | tries ${A.steps} vs ${B.steps}`);
+    const y = 24 + i * (T + 6); sg.fillStyle = '#fff'; sg.fillText(prompt, 4, y + 14); sg.font = '11px sans-serif'; sg.fillText(`real ${rA.score.toFixed(3)} vs ${rB.score.toFixed(3)}`, 4, y + 32); sg.fillText(`scorer ${scorerA.toFixed(3)} vs ${B.score.toFixed(3)}`, 4, y + 46); sg.fillText(`${A.steps} vs ${B.steps} tries`, 4, y + 60); sg.font = '13px sans-serif';
+    sg.drawImage(toCanvas(rA.img), 240, y, T, T); sg.drawImage(toCanvas(rB.img), 240 + T + 4, y, T, T); sg.drawImage(toCanvas(B.image), 240 + 2 * (T + 4), y, T, T);
+    const tinyA = eng.decode(A.tokens, A.crop.h, A.crop.w); sg.drawImage(toCanvas(tinyA), 240 + 3 * (T + 4), y, T, T);
+  }
+  const mean = (k) => res.rows.reduce((s, r) => s + r[k], 0) / res.rows.length;
+  res.summary = { meanRealA: mean('realA'), meanRealB: mean('realB'), meanScorerB: mean('scorerB'), meanScorerA: mean('scorerA'), bWins: res.rows.filter((r) => r.realB >= r.realA).length, scorerGap: mean('scorerB') - mean('realB') };
+  log(JSON.stringify(res.summary)); res.ok = true;
+} catch (e) { res.error = e.message + '\n' + e.stack; log('ERROR ' + e.message); console.error(e); }
+window.__result = res;
+</script></body>
