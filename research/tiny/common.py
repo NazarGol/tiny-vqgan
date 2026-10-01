@@ -321,3 +321,50 @@ def export_text(model, path_bin, path_json, meta=None):
     add("ln_f.g", model.ln_f.weight); add("ln_f.b", model.ln_f.bias); add("out.w", model.out.weight)
     data = np.concatenate(arrays); data.tofile(path_bin)
     json.dump({"type": "tinytext", "dtype": "f16", **model.cfg, "tensors": entries, "elements": int(data.size), **(meta or {})}, open(path_json, "w"))
+
+
+# ----------------------------------------------------------------------------- one-pass starting model (phase 5)
+class OnePass(nn.Module):
+    """(context tokens [B,S,S], mask [B,S,S] bool, text [B,512]) -> per-cell 64-d vectors [B,c0,S,S]; token logits = h · table^T.
+    Shader-friendly: table lookup, 3×3 convs with residual + a per-channel bias from the text (FiLM), ReLU, 1×1 out conv."""
+    def __init__(self, c0=64, width=96, layers=6, n_embed=N_EMBED, text_dim=512, table=None):
+        super().__init__(); self.cfg = dict(c0=c0, width=width, layers=layers, n_embed=n_embed, text_dim=text_dim)
+        self.emb = nn.Embedding(n_embed, c0); self.out_table = nn.Embedding(n_embed, c0)
+        if table is not None:
+            with torch.no_grad(): self.emb.weight.copy_(table); self.out_table.weight.copy_(table)
+        self.inp = nn.Conv2d(c0 + 1, width, 3, padding=1); self.convs = nn.ModuleList([nn.Conv2d(width, width, 3, padding=1) for _ in range(layers)])
+        self.film = nn.Linear(text_dim, width * (layers + 1)); self.out = nn.Conv2d(width, c0, 1)
+        nn.init.zeros_(self.film.weight); nn.init.zeros_(self.film.bias)
+    def forward(self, tokens, mask, text):
+        B = tokens.shape[0]; W = self.cfg["width"]
+        f = self.film(text).reshape(B, -1, W)                                        # [B, layers+1, W]
+        x = torch.cat([self.emb(tokens).permute(0, 3, 1, 2), mask[:, None].float()], 1)
+        x = F.relu(self.inp(x) + f[:, 0, :, None, None])
+        for i, c in enumerate(self.convs): x = F.relu(x + c(x) + f[:, i + 1, :, None, None])
+        return self.out(x)
+    def logits(self, h): return torch.einsum("bchw,nc->bhwn", h.float(), self.out_table.weight.float())
+    def predict(self, tokens, mask, text):   # argmax tokens on masked cells, context elsewhere
+        h = self.forward(tokens, mask, text); best = self.logits(h).argmax(-1)
+        return torch.where(mask, best, tokens)
+    def n_params(self): return sum(p.numel() for p in self.parameters())
+
+
+def export_onepass(model, path_bin, path_json, meta=None):
+    model = model.eval().cpu(); arrays, off, entries = [], 0, {}
+    def add(name, t):
+        nonlocal off; a = t.detach().float().reshape(-1).numpy().astype(np.float16); arrays.append(a); entries[name] = {"offset": off, "shape": list(t.shape)}; off += a.size
+    add("emb", model.emb.weight); add("out_table", model.out_table.weight)
+    layers = []
+    w, b = pack_conv(model.inp.weight.detach().float()[:, :], model.inp.bias.detach().float())   # cin = c0+1 is not a multiple of 4: pad to c0+4 (mask + 3 zero channels)
+    cin = model.cfg["c0"] + 4; w4 = torch.zeros(model.inp.out_channels, cin, 3, 3); w4[:, :model.cfg["c0"] + 1] = model.inp.weight.detach().float(); wp, bp = pack_conv(w4, model.inp.bias.detach().float())
+    ow, _ = (lambda t: (add("inp.w", t), None))(torch.from_numpy(wp.numpy())); ob, _ = (lambda t: (add("inp.b", t), None))(bp)
+    layers.append({"name": "inp", "cin": cin, "cout": model.inp.out_channels, "k": 3, "relu": True, "residual": None, "w": entries["inp.w"]["offset"], "b": entries["inp.b"]["offset"]})
+    for i, c in enumerate(model.convs):
+        wp, bp = pack_conv(c.weight.detach().float(), c.bias.detach().float()); add(f"c{i}.w", torch.from_numpy(wp.numpy())); add(f"c{i}.b", bp)
+        layers.append({"name": f"c{i}", "cin": c.in_channels, "cout": c.out_channels, "k": 3, "relu": True, "residual": "input", "w": entries[f"c{i}.w"]["offset"], "b": entries[f"c{i}.b"]["offset"]})
+    w1 = torch.zeros(model.out.out_channels, model.out.in_channels, 3, 3); w1[:, :, 1, 1] = model.out.weight.detach().float()[:, :, 0, 0]
+    wp, bp = pack_conv(w1, model.out.bias.detach().float()); add("out.w", torch.from_numpy(wp.numpy())); add("out.b", bp)
+    layers.append({"name": "head", "cin": model.out.in_channels, "cout": model.out.out_channels, "k": 3, "relu": False, "residual": None, "w": entries["out.w"]["offset"], "b": entries["out.b"]["offset"]})
+    add("film.w", model.film.weight); add("film.b", model.film.bias)
+    data = np.concatenate(arrays); data.tofile(path_bin)
+    json.dump({"type": "onepass", "dtype": "f16", **model.cfg, "tensors": entries, "layers": layers, "elements": int(data.size), **(meta or {})}, open(path_json, "w"))

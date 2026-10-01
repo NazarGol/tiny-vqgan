@@ -24,7 +24,7 @@ class TokenSearch:
         ys, xs = np.arange(h) * H // h, np.arange(w) * W // w; return g[np.ix_(ys, xs)]
 
     @torch.no_grad()
-    def run(self, targets, contexts, masks, generations=120, batch=32, seeds=8, bank_top=24, sources=4, patch=4, grow_edge=0.8, mutation=0.08, anneal=0.003, bank_patch=0.30, temperature=0.03, top_k=512, log=None):
+    def run(self, targets, contexts, masks, generations=120, batch=32, seeds=8, init=None, bank_top=24, sources=4, patch=4, grow_edge=0.8, mutation=0.08, anneal=0.003, bank_patch=0.30, temperature=0.03, top_k=512, log=None):
         """targets [K,512] unit (torch, any device); contexts [K,S,S] int64 numpy; masks [K,S,S] bool numpy. Returns best [K,S,S], scores [K], history."""
         K, S, _ = contexts.shape; r = self.rng; T = targets.to(self.dev).float()
         # retrieval + palette samplers per search
@@ -77,8 +77,10 @@ class TokenSearch:
         def score(cands):   # [K,B,S,S] -> [K,B]
             B = cands.shape[1]; e = self._emb(torch.from_numpy(cands.reshape(K * B, S, S))).reshape(K, B, -1)
             return (e * T[:, None, :]).sum(-1).cpu().numpy()
-        # seeds
-        cands = np.stack([np.stack([mosaic(k) for _ in range(seeds)]) for k in range(K)]); sc = score(cands)
+        # seeds: mosaics, or (phase 5) a given starting grid plus light mutations of it
+        if init is None: cands = np.stack([np.stack([mosaic(k) for _ in range(seeds)]) for k in range(K)])
+        else: cands = np.stack([np.stack([init[k].copy()] + [mutate(k, init[k].copy(), 0.05) for _ in range(seeds - 1)]) for k in range(K)])
+        sc = score(cands)
         bi = sc.argmax(1); best = cands[np.arange(K), bi]; best_sc = sc[np.arange(K), bi]; hist = [best_sc.mean()]
         for g in range(generations):
             prog = g / generations; rate = mutation * (1 - prog) + 0.01; temp = anneal * (1 - prog)

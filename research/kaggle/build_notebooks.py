@@ -87,4 +87,18 @@ write("tiny_text", "vqpaint-tiny-text", "vqpaint tiny text", nb("VQPAINT tiny te
     TEXT_DL,
     '''f"{sys.executable} -u {REPO}/web/research/tiny/train_text.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json --captions {DATA}/annotations"''',
     "text", "/kaggle/input/**/vqpaint-tiny-text*/text/ckpt.pt"))
+ONEPASS_DL = CLIP_DL + '''SC = find_input("vqpaint-tiny-scorer"); print("scorer kernel output:", SC); assert SC, "attach the vqpaint-tiny-scorer kernel output"
+SCK = sorted(glob.glob(f"{SC}/**/ckpt.pt", recursive=True)); assert SCK, "scorer ckpt.pt not found"; SCK = SCK[0]; print("scorer ckpt", SCK)
+ANN = f"{DATA}/annotations"
+if not os.path.exists(f"{ANN}/captions_train2017.json"):
+    sh(f"curl -sSL http://images.cocodataset.org/annotations/annotations_trainval2017.zip -o {TMP}/ann.zip && cd {DATA} && unzip -qo {TMP}/ann.zip annotations/captions_train2017.json annotations/captions_val2017.json && rm {TMP}/ann.zip")
+'''
+write("onepass", "vqpaint-onepass", "vqpaint onepass", nb("VQPAINT one-pass starting model (phase 5)",
+    "Runs the token-space search over many prompts/contexts with the trained scorer, trains a one-pass model that predicts a starting grid for a masked region from the text embedding + context, and compares search-from-one-pass vs search-from-mosaic at equal budget. Output: `/kaggle/working/onepass/`.",
+    '''S = dict(GEN_HOURS=1.2, N=8000, TRAIN_HOURS=1.0, SCORER="S", BRANCH="research/tiny-vqgan")''',
+    ONEPASS_DL,
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/gen_onepass_data.py --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json --captions {DATA}/annotations --out {OUT}/onepass_data.npz --n {S['N']} --hours {S['GEN_HOURS']} && {sys.executable} -u {REPO}/web/research/tiny/train_onepass.py --npz {OUT}/onepass_data.npz --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --out {OUT} --hours {S['TRAIN_HOURS']}"''',
+    "onepass", "/kaggle/input/**/vqpaint-onepass*/onepass/nothing"))
+# the onepass kernel also needs the scorer kernel's output
+import json as _j; m = _j.load(open(os.path.join(HERE, "onepass", "kernel-metadata.json"))); m["kernel_sources"] = ["noi3noi3/vqpaint-tiny-scorer"]; _j.dump(m, open(os.path.join(HERE, "onepass", "kernel-metadata.json"), "w"), indent=1)
 print("notebooks written")

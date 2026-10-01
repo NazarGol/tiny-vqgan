@@ -36,27 +36,8 @@ def teach(ids):   # np [B,77] -> unit [B,512]
     e = ts.run(None, {"input_ids": ids.astype(np.int64)})[0]; return e / (np.linalg.norm(e, axis=1, keepdims=True) + 1e-8)
 
 # ---- texts
-texts = {"coco": [], "val": []}
-if args.captions and os.path.exists(os.path.join(args.captions, "captions_train2017.json")):
-    texts["coco"] = [a["caption"].strip() for a in json.load(open(os.path.join(args.captions, "captions_train2017.json")))["annotations"]]
-    texts["val"] = [a["caption"].strip() for a in json.load(open(os.path.join(args.captions, "captions_val2017.json")))["annotations"]]
-    print("captions", len(texts["coco"]), "val", len(texts["val"]), flush=True)
-try:
-    from prompts import get_prompts; texts["prompts"] = list(dict.fromkeys(get_prompts(30000, seed=1)))
-except Exception as e: print("prompts.py unavailable", e); texts["prompts"] = []
-meta_src = open(os.path.join(C.EXPORT, "make_metaphors.py")).read()
-texts["metaphors"] = sorted(set(re.findall(r'"([^"\n]{3,60})"', meta_src.split("groups = {")[1].split("\n}")[0])))
-ADJ = ["tired", "happy", "anxious", "calm", "angry", "hopeful", "lost", "excited", "bored", "grateful", "sad", "nervous", "proud", "lonely", "fine", "overwhelmed", "curious", "relieved"]
-THING = ["my grandmother's kitchen", "the sea", "the old house", "my friends", "summer", "the city", "the mountains", "the garden", "the train", "home", "the river", "that song", "school", "the market", "the forest"]
-TOPIC = ["the budget", "the plan", "the deadline", "the schedule", "our trip", "the project", "the garden", "dinner", "the meeting", "the report", "the move", "the party", "the exam", "the book", "the painting"]
-VERB = ["call mom", "water the plants", "finish the report", "book the tickets", "fix the bike", "clean the kitchen", "write back", "buy bread", "pay the rent", "walk the dog", "read more", "sleep early", "start again", "say thank you", "take a break"]
-DAY = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "tomorrow", "next week", "the 5th", "noon", "midnight", "morning", "evening"]
-NOTE_T = ["I feel {adj} today", "deadline on {day}", "we should talk about {topic}", "remember to {verb}", "{topic} meeting on {day}", "I miss {thing}", "what if we {verb}?", "{topic} is {adj}", "let's {verb} on {day}", "thinking about {thing}", "{thing} at {day}", "I am {adj} about {topic}", "don't forget: {verb}", "{adj} and {adj}", "a note about {topic}", "{thing}", "{topic}", "{verb}", "{adj}", "why is {topic} so {adj}", "see you on {day}", "{thing} makes me {adj}", "plan: {verb}, then {verb}", "question about {topic}"]
-rng = random.Random(0)
-def note():
-    t = rng.choice(NOTE_T); return t.format(adj=rng.choice(ADJ), day=rng.choice(DAY), topic=rng.choice(TOPIC), verb=rng.choice(VERB), thing=rng.choice(THING))
-texts["notes"] = list(dict.fromkeys(note() for _ in range(20000)))
-print({k: len(v) for k, v in texts.items()}, flush=True)
+import texts as TX
+texts = TX.all_texts(args.captions); print({k: len(v) for k, v in texts.items()}, flush=True)
 MIX = [("coco", 0.55), ("prompts", 0.15), ("metaphors", 0.05), ("notes", 0.10), ("ids", 0.10), ("crop", 0.05)]
 MIX = [(k, w) for k, w in MIX if k in ("ids", "crop") or texts.get(k)]
 mix_p = np.array([w for _, w in MIX]); mix_p /= mix_p.sum()
@@ -97,7 +78,7 @@ def save_ckpt():
 
 # ---- eval sets
 ev_rng = np.random.default_rng(1)
-EV = {"val": (texts["val"] or texts["coco"])[:2000] if (texts["val"] or texts["coco"]) else [], "prompts40": ['a face', 'a red forest', 'the sea at night', 'a city street', 'green hills under a blue sky', 'a cat', 'deadline on Friday', "I miss my grandmother's kitchen", 'the smell of rain', 'a lighthouse in a storm', 'a bowl of oranges', 'snow on a mountain', 'a crowded market', 'a sleeping dog', 'fire', 'a glass of water on a table', 'we should talk about the budget', 'a yellow bicycle', 'an old library', "a child's drawing of a house", 'sunset over the plains', 'a portrait of a woman in blue', 'a horse in a field', 'mushrooms in the forest', 'the moon over the sea', 'a broken clock', 'a train station in winter', 'flowers in a vase', 'I feel tired today', 'a river through a canyon', 'a dark room with one candle', 'the first day of school', 'a bird on a wire', 'an abandoned factory', 'waves crashing on rocks', 'a wedding', 'a bridge in fog', 'coffee in the morning', 'a map of an imaginary island', 'the sound of a cello'],
+EV = {"val": (texts["val"] or texts["coco"])[:2000] if (texts["val"] or texts["coco"]) else [], "prompts40": TX.PROMPTS40, "_unused": ['a face', 'a red forest', 'the sea at night', 'a city street', 'green hills under a blue sky', 'a cat', 'deadline on Friday', "I miss my grandmother's kitchen", 'the smell of rain', 'a lighthouse in a storm', 'a bowl of oranges', 'snow on a mountain', 'a crowded market', 'a sleeping dog', 'fire', 'a glass of water on a table', 'we should talk about the budget', 'a yellow bicycle', 'an old library', "a child's drawing of a house", 'sunset over the plains', 'a portrait of a woman in blue', 'a horse in a field', 'mushrooms in the forest', 'the moon over the sea', 'a broken clock', 'a train station in winter', 'flowers in a vase', 'I feel tired today', 'a river through a canyon', 'a dark room with one candle', 'the first day of school', 'a bird on a wire', 'an abandoned factory', 'waves crashing on rocks', 'a wedding', 'a bridge in fog', 'coffee in the morning', 'a map of an imaginary island', 'the sound of a cello'],
       "metaphors": texts["metaphors"], "notes": texts["notes"][:500]}
 EV_IDS = {k: np.array([encode(t) for t in v], np.int64) for k, v in EV.items() if v}
 EV_T = {k: np.concatenate([teach(ids[i:i + 256]) for i in range(0, len(ids), 256)]) for k, ids in EV_IDS.items()}
