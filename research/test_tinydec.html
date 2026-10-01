@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><title>tinydec test</title><body style="background:#404040;color:#eee;font:14px monospace">
+<pre id="log"></pre><div id="imgs"></div>
+<script type="module">
+import { TinyDecoderGL } from '../lib/tinydec.js';
+const q = new URLSearchParams(location.search), base = q.get('base') || './tiny/test/', variant = q.get('variant') || 'A', reps = +(q.get('reps') || 20);
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const res = { ok: false };
+try {
+  const t0 = performance.now();
+  const dec = await TinyDecoderGL.load(base + `tiny_decoder_${variant}.json`, base + `tiny_decoder_${variant}.bin`);
+  res.loadMs = performance.now() - t0; res.halfRT = dec.halfRT; res.maxTex = dec.maxTex; res.uboAlign = dec.uboAlign; res.maxUbo = dec.maxUbo; res.weightMB = dec.weightBytes / 2 ** 20;
+  log(`loaded in ${res.loadMs.toFixed(0)} ms, halfRT ${dec.halfRT}, maxTex ${dec.maxTex}, ubo ${dec.maxUbo}`);
+  const ref = await (await fetch(base + `ref_${variant}.json`)).json(); res.cases = [];
+  for (const c of ref.cases) {
+    const tokens = Int32Array.from(c.tokens);
+    const exp = new Float32Array(Uint8Array.from(atob(c.expected), (ch) => ch.charCodeAt(0)).buffer);
+    const out = dec.decode(tokens, c.h, c.w);
+    let maxErr = 0, sumErr = 0; for (let i = 0; i < exp.length; i++) { const e = Math.abs(out.data[i] - exp[i]); if (e > maxErr) maxErr = e; sumErr += e; }
+    const r = { name: c.name, h: c.h, w: c.w, maxErr, meanErr: sumErr / exp.length }; res.cases.push(r);
+    log(`${c.name} ${c.w}x${c.h}: max err ${maxErr.toFixed(4)} mean ${r.meanErr.toFixed(5)}`);
+    const cv = document.createElement('canvas'); cv.width = out.w; cv.height = out.h; const g = cv.getContext('2d'); const id = g.createImageData(out.w, out.h); const n = out.w * out.h;
+    for (let i = 0; i < n; i++) { id.data[i * 4] = out.data[i] * 255; id.data[i * 4 + 1] = out.data[n + i] * 255; id.data[i * 4 + 2] = out.data[2 * n + i] * 255; id.data[i * 4 + 3] = 255; }
+    g.putImageData(id, 0, 0); cv.style.width = '128px'; document.getElementById('imgs').appendChild(cv);
+  }
+  // timing: 16x16 (256 px) and 12x12, warm
+  res.timing = {};
+  for (const S of [16, 12, 8]) {
+    const tok = new Int32Array(S * S); for (let i = 0; i < tok.length; i++) tok[i] = (i * 7919) % 16384;
+    dec.decodeRGBA(tok, S, S); dec.decodeRGBA(tok, S, S);
+    const t1 = performance.now(); for (let i = 0; i < reps; i++) dec.decodeRGBA(tok, S, S); res.timing[S] = (performance.now() - t1) / reps;
+    log(`decode ${S}x${S} tokens (${S * 16} px): ${res.timing[S].toFixed(1)} ms`);
+  }
+  res.ok = res.cases.every((c) => c.maxErr < 0.02);
+  if (performance.memory) res.jsHeapMB = performance.memory.usedJSHeapSize / 2 ** 20;
+} catch (e) { res.error = e.message; log('ERROR ' + e.message); console.error(e); }
+window.__result = res;
+</script></body>
