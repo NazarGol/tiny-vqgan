@@ -1,0 +1,80 @@
+"""Generates the Kaggle notebooks (decoder, scorer, text) with one shared, robust setup cell. Run: python build_notebooks.py"""
+import json, os
+HERE = os.path.dirname(os.path.abspath(__file__))
+SETUP = '''# setup: repo (research branch), taming-transformers, checkpoint (vqpaint-assets dataset or heibox), token grids (vqpaint-tokens dataset)
+import glob, os, shutil, subprocess, sys, time
+TMP, WORK = "/kaggle/tmp", "/kaggle/working"; os.makedirs(TMP, exist_ok=True)
+REPO, DATA = f"{TMP}/VQPAINT", f"{TMP}/data"
+def sh(cmd):
+    print("$", cmd, flush=True); subprocess.run(cmd, shell=True, check=True)
+def find_input(name):
+    for root in ("/kaggle/input", "/kaggle/input/datasets"):
+        for pat in (f"{root}/{name}*", f"{root}/*/{name}*", f"{root}/**/{name}*"):
+            hits = sorted(glob.glob(pat, recursive=True))
+            if hits: return hits[0]
+    return None
+sh("find /kaggle/input -maxdepth 4 | head -50 || true")
+if not os.path.isdir(REPO): sh(f"git clone -q --branch {S['BRANCH']} --depth 1 https://github.com/NazarGol/VQPAINT.git {REPO}")
+TAM = f"{REPO}/web/export/taming-transformers"
+if not os.path.isdir(TAM): sh(f"git clone -q --depth 1 https://github.com/CompVis/taming-transformers.git {TAM}")
+CK = f"{REPO}/web/export/checkpoints"; os.makedirs(CK, exist_ok=True)
+ASSETS = find_input("vqpaint-assets"); print("assets dataset:", ASSETS)
+for f in ("vqgan_imagenet_f16_16384.yaml", "vqgan_imagenet_f16_16384.ckpt"):
+    dst = f"{CK}/{f}"
+    if os.path.exists(dst): continue
+    src = f"{ASSETS}/checkpoints/{f}" if ASSETS else None
+    if src and os.path.exists(src): os.symlink(src, dst)
+    else:
+        url = "https://heibox.uni-heidelberg.de/f/274fb24ed38341bfa753/?dl=1" if f.endswith("yaml") else "https://heibox.uni-heidelberg.de/f/867b05fc8c4841768640/?dl=1"
+        sh(f"curl -sSL '{url}' -o {dst}")
+TOK = find_input("vqpaint-tokens"); print("tokens dataset:", TOK); assert TOK, "vqpaint-tokens dataset not mounted (see the listing above)"
+if not os.path.isdir(DATA): shutil.copytree(TOK, DATA)
+sh(f"ls -la {DATA} {CK}/ && nvidia-smi --query-gpu=name,memory.total --format=csv")
+'''
+def nb(title, intro, config, extra_setup, train_cmd, out_name, resume_glob):
+    cells = [{"cell_type": "markdown", "metadata": {}, "source": f"# {title}\n\n{intro}"}]
+    def code(s): cells.append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": s})
+    code(config + f'\nOUT = "/kaggle/working/{out_name}"\nprint(S)')
+    code(SETUP + extra_setup)
+    code(f'''os.makedirs(OUT, exist_ok=True)
+prev = sorted(glob.glob("{resume_glob}"))
+if prev and not os.path.exists(f"{{OUT}}/ckpt.pt"): shutil.copy(prev[-1], f"{{OUT}}/ckpt.pt"); print("resuming from", prev[-1])''')
+    code(f'''cmd = {train_cmd}
+print("$", cmd, flush=True)
+p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=REPO)
+with open(f"{{OUT}}/train.log", "a") as log:
+    for line in p.stdout:
+        if "Warning" in line or "warn(" in line: continue
+        print(line, end="", flush=True); log.write(line)
+print("exit", p.wait())''')
+    code('''import json
+print(json.dumps(json.load(open(f"{OUT}/eval.json")), indent=1)); sh(f"ls -la {OUT}")
+if os.path.exists(f"{OUT}/eval_sheet.png"):
+    from IPython.display import Image, display; display(Image(f"{OUT}/eval_sheet.png", width=700))''')
+    return {"cells": cells, "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python"}}, "nbformat": 4, "nbformat_minor": 5}
+def write(dirname, slug, title, notebook):
+    d = os.path.join(HERE, dirname); os.makedirs(d, exist_ok=True)
+    json.dump(notebook, open(os.path.join(d, f"{slug}.ipynb"), "w"), indent=1)
+    json.dump({"id": f"noi3noi3/{slug}", "title": title, "code_file": f"{slug}.ipynb", "language": "python", "kernel_type": "notebook", "is_private": True, "enable_gpu": True, "enable_tpu": False, "enable_internet": True,
+               "dataset_sources": ["noi3noi3/vqpaint-assets", "noi3noi3/vqpaint-tokens"], "competition_sources": [], "kernel_sources": [], "model_sources": []}, open(os.path.join(d, "kernel-metadata.json"), "w"), indent=1)
+
+CLIP_DL = '''sh(f"{sys.executable} -m pip install -q lpips tokenizers scipy")
+sh(f"{sys.executable} -m pip install -q onnxruntime-gpu || {sys.executable} -m pip install -q onnxruntime")
+for f in ("onnx/vision_model.onnx", "onnx/text_model.onnx", "tokenizer.json"):
+    dst = f"{DATA}/{os.path.basename(f)}"
+    if not os.path.exists(dst): sh(f"curl -sSL https://huggingface.co/Xenova/mobileclip_s0/resolve/main/{f} -o {dst}")
+import onnxruntime as ort; print("ORT providers:", ort.get_available_providers())
+'''
+write("tiny_decoder", "vqpaint-tiny-decoder", "vqpaint tiny decoder", nb("VQPAINT tiny decoder (distilled VQGAN f16 decoder)",
+    "Small conv decoders from `vqgan_imagenet_f16_16384` tokens to RGB, distilled from the original decoder on on-the-fly token grids. Output: `/kaggle/working/tiny/`.",
+    '''S = dict(HOURS=3.5, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=2e-3, BRANCH="research/tiny-vqgan")''',
+    CLIP_DL,
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_decoder.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --lpips {S['LPIPS']} --lr {S['LR']} --clip {DATA}/vision_model.onnx"''',
+    "tiny", "/kaggle/input/**/vqpaint-tiny-decoder*/tiny/ckpt.pt"))
+write("tiny_scorer", "vqpaint-tiny-scorer", "vqpaint tiny scorer", nb("VQPAINT token scorer (tokens → MobileCLIP image embedding)",
+    "Distils teacher decoder + MobileCLIP-S0 vision into a small conv net on the token grid. Output: `/kaggle/working/scorer/`.",
+    '''S = dict(HOURS=2.5, BATCH=32, VARIANTS="S:64:64,96,128,192;M:64:96,128,192,256", BRANCH="research/tiny-vqgan")''',
+    CLIP_DL,
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_scorer.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --clip-vision {DATA}/vision_model.onnx --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json"''',
+    "scorer", "/kaggle/input/**/vqpaint-tiny-scorer*/scorer/ckpt.pt"))
+print("notebooks written")

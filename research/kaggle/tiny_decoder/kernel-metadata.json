@@ -1,7 +1,7 @@
 {
  "id": "noi3noi3/vqpaint-tiny-decoder",
  "title": "vqpaint tiny decoder",
- "code_file": "vqpaint_tiny_decoder.ipynb",
+ "code_file": "vqpaint-tiny-decoder.ipynb",
  "language": "python",
  "kernel_type": "notebook",
  "is_private": true,
