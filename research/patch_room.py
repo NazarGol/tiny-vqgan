@@ -5,9 +5,11 @@ s = open(path).read(); n = 0
 REPS = [
  ("import { Painter } from '../lib/search.js';", "import { Painter } from '../lib/search.js';\nimport { loadEngineBridge } from './engine_bridge.js';"),
  ("const lowMem = isPhone || safeMode || params.get('lowmem') === '1';", "const lowMem = isPhone || safeMode || params.get('lowmem') === '1';\nlet useTiny = params.get('engine') === 'tiny';   // the light engine (tiny decoder + token scorer, WebGL2): default on phones and without WebGPU, ?engine=ort forces the ONNX path"),
- ("const max = lowMem ? 8 : 40;", "const max = useTiny ? 24 : lowMem ? 8 : 40;"),
+ # either the lasso cap (older room.js) or the hold-to-grow radius (no-modes room.js)
+ (("const max = lowMem ? 8 : 40;", "const max = useTiny ? 24 : lowMem ? 8 : 40;"), ("const MAX_R = lowMem ? 4 : 12, BASE_R = lowMem ? 3 : 4.5;", "const MAX_R = useTiny ? 8 : lowMem ? 4 : 12, BASE_R = useTiny ? 4 : lowMem ? 3 : 4.5;")),
  ("if (h && (forceNoPaint || lowMem || !caps.gpu)) return requestHelp(", "if (h && (forceNoPaint || (!useTiny && (lowMem || !caps.gpu)))) return requestHelp("),
- ("if (name === 'brush' && ready && !safeMode && !lowMem) ensureBrush()", "if (name === 'brush' && ready && !safeMode && (!lowMem || useTiny)) ensureBrush()"),
+ # the brush-on-select line only exists in the older room.js (optional)
+ (("if (name === 'brush' && ready && !safeMode && !lowMem) ensureBrush()", "if (name === 'brush' && ready && !safeMode && (!lowMem || useTiny)) ensureBrush()"), None),
  ("    if (lowMem) await releaseBrush();\n", "    if (lowMem && !useTiny) await releaseBrush();\n"),
  ("    if (photo && photo.chw) {   // the photo guides CLIP too", "    if (photo && (useTiny ? photo.tokens : photo.chw)) {   // the photo guides CLIP too (light engine: the scorer's embedding of the photo's tokens)"),
  ("      const [pe] = await clip.embedImages(photo.chw.length", "      const [pe] = useTiny ? [clip.embedTokens(photo.tokens, photo.side)] : await clip.embedImages(photo.chw.length"),
