@@ -19,12 +19,20 @@ export class Engine {
     const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json' } : null;
     if (textUrls) await Promise.all([fb(textUrls.tokenizerUrl), fb(textUrls.jsonUrl), fb(textUrls.binUrl)]);   // cached; the worker parses them
     const nn = new GLNN();
-    const [dec, sc, palette, bk] = await Promise.all([
-      TinyDecoderGL.load(base + `tiny/tiny_decoder_${variant}.json`, base + `tiny/tiny_decoder_${variant}.bin`, { fetchBuf: fb, nn }),
+    // variant 'auto': start with A; if a 256 px decode takes more than ~60 ms on this GPU, switch to the lighter B
+    const want = variant === 'auto' ? 'A' : variant;
+    let [dec, sc, palette, bk] = await Promise.all([
+      TinyDecoderGL.load(base + `tiny/tiny_decoder_${want}.json`, base + `tiny/tiny_decoder_${want}.bin`, { fetchBuf: fb, nn }),
       TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }),
       Palette.load(base + 'palette/'),
       bank ? Bank.load(base + bank + '/').catch((e) => { console.warn('bank', e); return null; }) : null,
     ]);
+    if (variant === 'auto') {
+      const probe = new Int32Array(256).fill(6328), ms = []; for (let i = 0; i < 4; i++) { dec.decodeRGBA(probe, 16, 16); ms.push(dec.stats.lastMs); }
+      const med = ms.sort((a, b) => a - b)[2];
+      if (med > 60) { try { const b = await TinyDecoderGL.load(base + 'tiny/tiny_decoder_B.json', base + 'tiny/tiny_decoder_B.bin', { fetchBuf: fb, nn }); dec.release(); dec = b; dec.variant = 'B'; } catch (e) { console.warn('variant B unavailable', e); } }
+      dec.probeMs = med; dec.variant ||= 'A';
+    }
     return new Engine({ nn, decoder: dec, scorer: sc, palette, bank: bk, textEncoder, base, textUrls });
   }
 

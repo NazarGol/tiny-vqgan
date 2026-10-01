@@ -7,7 +7,8 @@ const seconds = +(args.seconds || 4), browserName = args.browser || 'chromium', 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm', '.css': 'text/css', '.bin': 'application/octet-stream' };
 const server = http.createServer((req, res) => { const p = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname)); if (!p.startsWith(root) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
 await new Promise((r) => server.listen(0, '127.0.0.1', r)); const port = server.address().port, roomId = 'tiny-' + Math.random().toString(36).slice(2, 7);
-const url = `http://127.0.0.1:${port}/app/room.html?r=${roomId}&models=pages&ort=/node_modules/onnxruntime-web/dist/${deviceName ? '' : '&engine=tiny'}`;
+// default: desktop opts in with ?engine=tiny; --device: a phone profile picks it by itself; --nogpu: the app's no-WebGPU path (nogpu=1) picks it by itself
+const url = `http://127.0.0.1:${port}/app/room.html?r=${roomId}&models=pages&ort=/node_modules/onnxruntime-web/dist/${args.nogpu ? '&nogpu=1' : deviceName ? '' : '&engine=tiny'}`;
 const browser = browserName === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: 'chromium', headless: true, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--use-angle=metal'] });
 const ctx = await browser.newContext({ ...(deviceName ? devices[deviceName] : { viewport: { width: 1100, height: 760 } }) }); const page = await ctx.newPage();
 const errors = []; page.on("pageerror", (e) => { errors.push(e.message); console.log("[pageerror]", e.message); }); page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") console.log("[console]", m.text().slice(0, 300)); });

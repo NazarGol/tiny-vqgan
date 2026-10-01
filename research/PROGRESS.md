@@ -30,3 +30,14 @@ Goal: paint on the minimum phones (`web/DEVICES.md`) with no ML runtime in the l
 - `app/engine_bridge.js` presents the engine with the decoder / clip / painter shapes room.js uses; room.js: `useTiny` = `?engine=tiny`, or by default on phones (lowMem) and without WebGPU (`?engine=ort` forces the ONNX path). With the light engine phones paint themselves (no helper request), keep the engine loaded between strokes, lasso cap 24 tokens, margin 2. Photos: tokens still seed the shape; the photo's CLIP embedding is not mixed in (no image tower in the light engine).
 - `research/test_app_tiny.mjs`: desktop Chromium (`?engine=tiny`) and the iPhone 11 WebKit profile paint two strokes locally: brush ready in 1.3–2.5 s (17.5 MB of files), ~6 000–6 800 tries per 4 s stroke, notes carry tokens + lasso path, previews upload, layers render. PASS on both.
 - `tools/measure_memory.mjs --browser webkit --device "iPhone 11"` (the product's tool, phone paints itself with the light engine): viewing 108 MB, **painting peak 280 MB** above the empty browser (WebContent process 298 MB total; was 1 777 MB with ORT), stroke 7.6 s including model load. ORT path: `app/test_app.mjs` ALL PASS after the patch.
+
+## Phase 4 test matrix (`research/test_matrix.sh`: engine test page, 20 strokes × 3 s, text encode per stroke, M1 Pro emulation)
+| profile | tries/s | 256 px decode | text encode | peak RSS above empty tab | 20 strokes |
+|---|---|---|---|---|---|
+| Chrome desktop | 2 230 | 6–15 ms | 190 ms | 296 MB | ok |
+| Chrome, JS heap capped at 384 MB (engine never uses WebGPU) | 2 190 | 6–9 ms | 195 ms | 302 MB | ok |
+| Safari desktop (WebKit) | 1 705 | 7–22 ms | 146 ms | 293 MB | ok |
+| iPhone 11 profile (WebKit) | 1 800 | 9–17 ms | 299 ms | 277 MB | ok |
+| Pixel 5 profile (Chromium) | 2 070 | 6–12 ms | 193 ms | 303 MB | ok |
+
+Also: decoder variant B (3.0 MB) matches PyTorch like A; `variant: 'auto'` loads A, probes a 256 px decode and switches to B above 60 ms; the app's no-WebGPU path (`?nogpu=1`) picks the light engine by itself and paints (7 400 tries in 4.5 s).

@@ -24,7 +24,7 @@ REPS = [
       loading.set(t('load.brush', { pct: 0 }));
       engineBridge = await loadEngineBridge({ base: M, onProgress: onP, bank: /^[a-z_]+$/.test(params.get('bank') || '') ? params.get('bank') : 'bank' });
       decoder = engineBridge.decoder; clip = engineBridge.clip; painter = engineBridge.painter; bank = engineBridge.engine.bank;
-      layers.setDecoder(decoder); caps.speed = stats.fullDecodeMs = Math.round(engineBridge.probe()); stats.engine = 'tiny';
+      layers.setDecoder(decoder); caps.speed = stats.fullDecodeMs = Math.round(engineBridge.probe()); stats.engine = 'tiny'; stats.engineVariant = engineBridge.decoder.variant;
       setStage('brush-ready'); beacon('brush-ready'); modelsLoaded = true; caps.paint = true; room?.setCaps(caps);
       loading.hide(); sessionStorage.setItem('vqpaint.boot', 'ok');
       return;

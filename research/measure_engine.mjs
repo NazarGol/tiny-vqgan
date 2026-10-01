@@ -11,7 +11,9 @@ const url = `http://127.0.0.1:${port}/research/test_engine.html?base=${encodeURI
 const pattern = browserName === 'webkit' ? 'ms-playwright/webkit' : 'ms-playwright/chromium';
 const rss = () => { try { return execSync(`ps -axo rss=,command= | grep -F '${pattern}' | grep -v grep | awk '{s+=$1} END {print s+0}'`).toString().trim() * 1 || 0; } catch { return 0; } };
 const wc = () => { try { return execSync(`ps -axo rss=,command= | grep -F '${pattern}' | grep -F -e WebContent -e 'type=renderer' | grep -v grep | sort -rn | head -1 | awk '{print $1+0}'`).toString().trim() * 1 || 0; } catch { return 0; } };
-const browser = browserName === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: 'chromium', headless: true, args: ['--ignore-gpu-blocklist', '--use-angle=metal'] });
+// --nogpu: Chromium without WebGPU and with a JS heap cap like a 3 GB phone's renderer (the WebGL2 path must carry everything)
+const chromeArgs = ['--ignore-gpu-blocklist', '--use-angle=metal', ...(args.nogpu ? ['--disable-features=WebGPU', '--disable-webgpu', '--js-flags=--max-old-space-size=384'] : ['--enable-unsafe-webgpu'])];
+const browser = browserName === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: 'chromium', headless: true, args: chromeArgs });
 const ctx = await browser.newContext({ ...(devices[deviceName] || {}) }); const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.goto('about:blank'); await page.waitForTimeout(1500); const base = rss(), baseWc = wc();
@@ -19,5 +21,5 @@ let peak = 0, peakWc = 0; const timer = setInterval(() => { peak = Math.max(peak
 const t0 = Date.now(); await page.goto(url); await page.waitForFunction(() => window.__result, null, { timeout: 600000 }); clearInterval(timer);
 const r = await page.evaluate(() => window.__result);
 const tries = r.strokes.map((s) => s.perSec); const avg = tries.length ? tries.reduce((a, b) => a + b, 0) / tries.length : 0;
-console.log(JSON.stringify({ browser: browserName, device: deviceName, ok: r.ok, error: r.error, strokes: r.strokes.length, triesPerSec: Math.round(avg), decodeMs: r.strokes.map((s) => +s.decodeMs.toFixed(1)).slice(0, 5), textMs: r.textMs, loadMs: r.loadMs, weightMB: +r.weightMB.toFixed(1), texMB: +r.texMB.toFixed(1), peakRssAboveEmptyMB: Math.round(peak / 1024), peakWebContentMB: Math.round(peakWc / 1024), baseWebContentMB: Math.round(baseWc / 1024), totalSec: +((Date.now() - t0) / 1000).toFixed(0) }));
+console.log(JSON.stringify({ browser: browserName, device: deviceName, nogpu: !!args.nogpu, webgpu: await page.evaluate(() => !!navigator.gpu), ok: r.ok, error: r.error, strokes: r.strokes.length, triesPerSec: Math.round(avg), decodeMs: r.strokes.map((s) => +s.decodeMs.toFixed(1)).slice(0, 5), textMs: r.textMs, loadMs: r.loadMs, weightMB: +r.weightMB.toFixed(1), texMB: +r.texMB.toFixed(1), peakRssAboveEmptyMB: Math.round(peak / 1024), peakWebContentMB: Math.round(peakWc / 1024), baseWebContentMB: Math.round(baseWc / 1024), totalSec: +((Date.now() - t0) / 1000).toFixed(0) }));
 await browser.close(); server.close();
