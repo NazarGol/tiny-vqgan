@@ -2,3 +2,4 @@ web/research/data/*.npy
 web/research/data/*.u16
 web/research/data/*.log
 web/research/out/
+web/research/out/
