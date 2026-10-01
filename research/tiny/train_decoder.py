@@ -17,6 +17,8 @@ ap.add_argument("--lr", type=float, default=2e-3); ap.add_argument("--lpips", ty
 ap.add_argument("--ckpt-every", type=float, default=900); ap.add_argument("--eval-every", type=float, default=1800)
 ap.add_argument("--smoke", action="store_true", help="a few tiny steps on the local machine"); ap.add_argument("--max-steps", type=int, default=0)
 ap.add_argument("--clip", default="", help="MobileCLIP vision ONNX for the CLIP-agreement metric (optional)")
+ap.add_argument("--gan-w", type=float, default=0.0, help="hinge-GAN weight on the student (0 = off); a small PatchGAN discriminator trained alongside")
+ap.add_argument("--gan-start", type=float, default=0.4, help="fraction of the time budget after which the adversarial term is switched on")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
 sdev = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -58,6 +60,11 @@ for spec in args.variants.split(";"):
     print(f"variant {name}: widths {widths} blocks {blocks} params {m.n_params()/1e6:.2f} M -> fp16 {m.n_params()*2/2**20:.1f} MiB", flush=True)
 import lpips
 lp = lpips.LPIPS(net="vgg", verbose=False).to(sdev).eval()
+disc = None
+if args.gan_w > 0:   # PatchGAN on 256 px: 3 -> 64 -> 128 -> 256 -> 1 (stride 2), LeakyReLU; shared across variants
+    import torch.nn as nn
+    disc = nn.Sequential(nn.Conv2d(3, 64, 4, 2, 1), nn.LeakyReLU(0.2), nn.Conv2d(64, 128, 4, 2, 1), nn.GroupNorm(8, 128), nn.LeakyReLU(0.2), nn.Conv2d(128, 256, 4, 2, 1), nn.GroupNorm(8, 256), nn.LeakyReLU(0.2), nn.Conv2d(256, 1, 4, 1, 1)).to(sdev)
+    dopt = torch.optim.AdamW(disc.parameters(), lr=args.lr * 0.5, betas=(0.5, 0.99)); print("adversarial term on after", args.gan_start, "of the budget, weight", args.gan_w, flush=True)
 for p in lp.parameters(): p.requires_grad_(False)
 scaler = torch.amp.GradScaler(enabled=sdev.type == "cuda")
 
@@ -143,11 +150,16 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
             l1 = (pred.float() - tgt).abs().mean()
             lpv = lp(pred.float().clamp(0, 1) * 2 - 1, tgt * 2 - 1).mean() if args.lpips > 0 else torch.zeros((), device=sdev)
             loss = l1 + args.lpips * lpv
+            gan_on = disc is not None and frac > args.gan_start
+            if gan_on: loss = loss - args.gan_w * disc(pred.float().clamp(0, 1) * 2 - 1).mean()
         v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"])
         with torch.no_grad():
             d = args.ema if step > warm else 0.0
             for pe, pm in zip(v["ema"].parameters(), v["model"].parameters()): pe.mul_(d).add_(pm.detach(), alpha=1 - d)
         acc[n]["l1"] += l1.item(); acc[n]["lp"] += lpv.item(); acc[n]["k"] += 1
+        if gan_on:   # hinge loss for the discriminator on this variant's prediction
+            d_real = disc(tgt * 2 - 1); d_fake = disc(pred.detach().float().clamp(0, 1) * 2 - 1)
+            dloss = F.relu(1 - d_real).mean() + F.relu(1 + d_fake).mean(); dopt.zero_grad(set_to_none=True); dloss.backward(); dopt.step()
     scaler.update(); step += 1; seen += tok.shape[0]
     if time.time() - last_log > 60 or args.smoke:
         dt = time.time() - last_log; print(f"step {step} {elapsed()/3600:.2f}h lr {lr:.2e} S={tok.shape[1]} " + " | ".join(f"{n}: L1 {a['l1']/max(1,a['k']):.4f} LPIPS {a['lp']/max(1,a['k']):.4f}" for n, a in acc.items()) + f"  {seen/dt:.1f} img/s q={q.qsize()}", flush=True)
@@ -157,6 +169,10 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
 stop = True
 save_ckpt(); summary = evaluate(final=True)
 for n, v in variants.items():
-    man = C.export_tinydec(copy.deepcopy(v["ema"]).cpu(), os.path.join(args.out, f"tiny_decoder_{n}.bin"), os.path.join(args.out, f"tiny_decoder_{n}.json"), meta={"variant": n, "step": step, "metrics": summary[n]})
+    acts = []; hooks = [m.register_forward_hook(lambda mod, i, o: acts.append(float(o.detach().abs().max()))) for m in v["ema"].modules() if isinstance(m, torch.nn.Conv2d)]
+    with torch.no_grad():
+        for label, g in EVAL[:12]: v["ema"](torch.from_numpy(g)[None].to(sdev))
+    for h in hooks: h.remove()
+    man = C.export_tinydec(copy.deepcopy(v["ema"]).cpu(), os.path.join(args.out, f"tiny_decoder_{n}.bin"), os.path.join(args.out, f"tiny_decoder_{n}.json"), meta={"variant": n, "step": step, "metrics": summary[n], "max_abs_activation": max(acts)})
     print(f"exported {n}: {os.path.getsize(os.path.join(args.out, f'tiny_decoder_{n}.bin'))/2**20:.2f} MiB, {len(man['layers'])} conv layers", flush=True)
 print("done", flush=True)
