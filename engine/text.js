@@ -8,12 +8,9 @@ export class TinyTextJS {
     return new TinyTextJS(manifest, new Uint16Array(bin));
   }
   constructor(m, f16) {
-    this.m = m; const T = m.tensors, get = (n) => { const t = T[n], len = t.shape.reduce((a, b) => a * b, 1); return f16ToF32(f16.subarray(t.offset, t.offset + len)); };
-    this.W = m.width; this.H = m.heads; this.E = m.emb_dim; this.ctx = m.ctx; this.out_dim = m.out_dim;
-    this.tokRaw = f16.slice(T.tok.offset, T.tok.offset + m.vocab * m.emb_dim);   // kept fp16: rows are converted on demand
-    this.pin = { w: get('proj_in.w'), b: get('proj_in.b') }; this.pos = get('pos');
-    this.blocks = []; for (let i = 0; i < m.layers; i++) this.blocks.push({ ln1g: get(`b${i}.ln1.g`), ln1b: get(`b${i}.ln1.b`), qkvw: get(`b${i}.qkv.w`), qkvb: get(`b${i}.qkv.b`), pw: get(`b${i}.proj.w`), pb: get(`b${i}.proj.b`), ln2g: get(`b${i}.ln2.g`), ln2b: get(`b${i}.ln2.b`), f1w: get(`b${i}.fc1.w`), f1b: get(`b${i}.fc1.b`), f2w: get(`b${i}.fc2.w`), f2b: get(`b${i}.fc2.b`) });
-    this.lnfg = get('ln_f.g'); this.lnfb = get('ln_f.b'); this.outw = get('out.w');
+    // all weights stay fp16 (one copy, 6–9 MB); each tensor is converted to fp32 while it is used and freed right after
+    this.m = m; this.f16 = f16; const T = m.tensors; this.t = (n) => { const t = T[n], len = t.shape.reduce((a, b) => a * b, 1); return f16ToF32(f16.subarray(t.offset, t.offset + len)); };
+    this.W = m.width; this.H = m.heads; this.E = m.emb_dim; this.ctx = m.ctx; this.out_dim = m.out_dim; this.tokOff = T.tok.offset;
     this.weightBytes = f16.byteLength;
   }
   // y[T,O] = x[T,I] · W[O,I]^T + b
@@ -25,13 +22,14 @@ export class TinyTextJS {
     let Tn = ids.length; let eos = 0; for (let t = 0; t < ids.length; t++) if (ids[t] > ids[eos]) eos = t;   // CLIP pools at argmax(ids) = EOS
     Tn = Math.min(Tn, eos + 1);   // positions after EOS cannot influence it (causal), so skip them
     // token table (fp16 rows) -> proj_in + pos
-    const x = new Float32Array(Tn * W), row = new Float32Array(E);
+    const x = new Float32Array(Tn * W), pinw = this.t('proj_in.w'), pinb = this.t('proj_in.b'), pos = this.t('pos');
     for (let t = 0; t < Tn; t++) {
-      const r16 = this.tokRaw.subarray(ids[t] * E, ids[t] * E + E); const r = f16ToF32(r16);
-      for (let o = 0; o < W; o++) { let s = this.pin.b[o]; const wo = o * E; for (let i = 0; i < E; i++) s += r[i] * this.pin.w[wo + i]; x[t * W + o] = s + this.pos[t * W + o]; }
+      const r = f16ToF32(this.f16.subarray(this.tokOff + ids[t] * E, this.tokOff + ids[t] * E + E));
+      for (let o = 0; o < W; o++) { let s = pinb[o]; const wo = o * E; for (let i = 0; i < E; i++) s += r[i] * pinw[wo + i]; x[t * W + o] = s + pos[t * W + o]; }
     }
     const att = new Float32Array(Tn);
-    for (const B of this.blocks) {
+    for (let bi = 0; bi < this.m.layers; bi++) {
+      const g = (n) => this.t(`b${bi}.${n}`), B = { ln1g: g('ln1.g'), ln1b: g('ln1.b'), qkvw: g('qkv.w'), qkvb: g('qkv.b'), pw: g('proj.w'), pb: g('proj.b'), ln2g: g('ln2.g'), ln2b: g('ln2.b'), f1w: g('fc1.w'), f1b: g('fc1.b'), f2w: g('fc2.w'), f2b: g('fc2.b') };
       const h = this._ln(x, Tn, W, B.ln1g, B.ln1b), qkv = this._linear(h, Tn, W, B.qkvw, B.qkvb, 3 * W), ctx = new Float32Array(Tn * W), scale = 1 / Math.sqrt(hd);
       for (let hh = 0; hh < H; hh++) for (let t = 0; t < Tn; t++) {
         let mx = -Infinity; const qo = t * 3 * W + hh * hd;
@@ -44,7 +42,7 @@ export class TinyTextJS {
       for (let i = 0; i < f.length; i++) { const v = f[i]; f[i] = 0.5 * v * (1 + Math.tanh(0.7978845608028654 * (v + 0.044715 * v * v * v))); }
       const o2 = this._linear(f, Tn, 4 * W, B.f2w, B.f2b, W); for (let i = 0; i < x.length; i++) x[i] += o2[i];
     }
-    const last = this._ln(x.subarray(eos * W, eos * W + W), 1, W, this.lnfg, this.lnfb), e = this._linear(last, 1, W, this.outw, null, this.out_dim);
+    const last = this._ln(x.subarray(eos * W, eos * W + W), 1, W, this.t('ln_f.g'), this.t('ln_f.b')), e = this._linear(last, 1, W, this.t('out.w'), null, this.out_dim);
     let n = 0; for (let i = 0; i < e.length; i++) n += e[i] * e[i]; n = Math.sqrt(n) + 1e-8; for (let i = 0; i < e.length; i++) e[i] /= n;
     return e;
   }

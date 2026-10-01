@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><title>mem probe</title><body style="background:#404040;color:#eee;font:14px monospace"><pre id="log"></pre>
+<script type="module">
+// ?what=gl|programs|decoder|scorer|data|worker|all : load only that part, then hold so the process RSS can be sampled
+import { GLNN, VS, convFS } from '../lib/glnn.js';
+import { TinyDecoderGL } from '../lib/tinydec.js';
+import { TinyScorerGL } from '../lib/tinyscorer.js';
+import { Palette } from '../lib/palette.js';
+import { Bank } from '../lib/bank.js';
+const q = new URLSearchParams(location.search), what = q.get('what') || 'all', base = './testmodels/';
+const fb = (u) => fetch(u).then((r) => r.arrayBuffer()); const keep = {};
+const res = { what };
+try {
+  if (what === 'gl' || what === 'programs' || what === 'all') { keep.nn = new GLNN(); res.renderer = keep.nn.renderer; }
+  if (what === 'programs' || what === 'all') { let n = 0; for (const GI of [16, 12, 8, 6, 4, 3, 24, 32, 48]) for (const up of [false, true]) { keep.nn.program(`p${GI}${up}`, VS, convFS({ GI, up })); n++; } res.programs = n; }
+  if (what === 'decoder' || what === 'all') keep.dec = await TinyDecoderGL.load(base + 'tiny/tiny_decoder_A.json', base + 'tiny/tiny_decoder_A.bin', { fetchBuf: fb, nn: keep.nn });
+  if (what === 'scorer' || what === 'all') keep.sc = await TinyScorerGL.load(base + 'tiny/tiny_scorer_S.json', base + 'tiny/tiny_scorer_S.bin', { fetchBuf: fb, nn: keep.nn || keep.dec?.nn });
+  if (what === 'data' || what === 'all') { keep.pal = await Palette.load(base + 'palette/'); keep.bank = await Bank.load(base + 'bank/'); }
+  if (what === 'worker' || what === 'all') {
+    const w = new Worker('../engine/text_worker.js', { type: 'module' }); keep.w = w;
+    await new Promise((r) => { w.onmessage = r; w.postMessage({ id: 1, init: { tokenizerUrl: new URL(base + 'mobileclip_s0/tokenizer.json', location.href).href, jsonUrl: new URL(base + 'tiny/tiny_text_S.json', location.href).href, binUrl: new URL(base + 'tiny/tiny_text_S.bin', location.href).href } }); });
+  }
+  if (what === 'decode' ) { keep.dec = await TinyDecoderGL.load(base + 'tiny/tiny_decoder_A.json', base + 'tiny/tiny_decoder_A.bin', { fetchBuf: fb }); const t = new Int32Array(256); for (let i = 0; i < 20; i++) keep.dec.decodeRGBA(t, 16, 16); }
+  if (what === 'score') { keep.sc = await TinyScorerGL.load(base + 'tiny/tiny_scorer_S.json', base + 'tiny/tiny_scorer_S.bin', { fetchBuf: fb }); keep.sc.setTargets([new Float32Array(512).fill(0.044)]); const t = new Int32Array(144 * 32); for (let i = 0; i < 20; i++) keep.sc.score(t, 12, 32); }
+  await new Promise((r) => setTimeout(r, 2500)); res.ok = true;
+} catch (e) { res.error = e.message; }
+window.__keep = keep; window.__result = res;
+</script></body>

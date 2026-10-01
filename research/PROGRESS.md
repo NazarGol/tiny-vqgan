@@ -20,3 +20,8 @@ Goal: paint on the minimum phones (`web/DEVICES.md`) with no ML runtime in the l
 ## Notes
 - Kaggle kernels v1 failed: datasets were not found at `/kaggle/input/<slug>`; v2 searches recursively and falls back to heibox for the checkpoint. Kernel logs are only readable after a kernel ends.
 - Uploading the token grids to Hugging Face as a fallback data source was blocked by the Claude Code permission classifier (data exfiltration rule); Kaggle datasets remain the only data channel. Nothing secret was involved (token indices, 17 MB).
+
+## Engine memory (WebKit headless, iPhone 11 profile, process RSS above an empty tab; `research/measure_engine.mjs`, `measure_probe.mjs`)
+- 20 strokes in a row with a text encode per stroke: peak **250 MB**, flat across strokes (was 426 MB before: the texture pool grew with every new crop size → LRU trim to 24 MB after each stroke; and WebKit never returns a terminated Worker's memory → one persistent text worker instead of one per note).
+- Breakdown of a load: GL context 6, shader programs 4, tiny decoder 28, scorer 42, palette + bank 59 (Cache Storage machinery; the app already pays this while viewing), text worker 84 → 73 with fp16-only weights (JSON tokenizer tables + a second JS VM dominate). Chromium (Pixel 5 profile) renderer: +180 MB over 20 strokes.
+- Speed on the M1 Pro: ~1 750 tries/s (WebKit) / ~2 000 (Chromium) with batch 32, 256 px preview decode 7–15 ms, text encode 40–95 ms. Real-phone numbers are unknown until the device test.

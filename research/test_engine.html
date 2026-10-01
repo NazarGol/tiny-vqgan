@@ -25,6 +25,7 @@ try {
   }
   if (performance.memory) res.jsHeapMB = performance.memory.usedJSHeapSize / 2 ** 20;
   res.texMB = eng.nn.texBytes / 2 ** 20;
+  if (q.get('hold')) await new Promise((r) => setTimeout(r, +q.get('hold')));
   res.ok = res.strokes.length === strokes && res.strokes.every((s) => s.tries > 0);
 } catch (e) { res.error = e.message + '\n' + e.stack; log('ERROR ' + e.message); console.error(e); }
 window.__result = res;
