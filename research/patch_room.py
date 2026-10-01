@@ -35,10 +35,14 @@ REPS = [
   if (params.get('engine') !== 'ort' && (lowMem || !gpu)) useTiny = true;"""),
 ]
 missing = []
-for a, b in REPS:
-    if b in s: continue
-    if s.count(a) != 1: missing.append(a[:70]); continue
-    s = s.replace(a, b); n += 1
+for item in REPS:
+    alts = [x for x in (item if isinstance(item[0], tuple) else (item,)) if x is not None]
+    if any(b in s for a, b in alts): continue
+    hit = next((x for x in alts if s.count(x[0]) == 1), None)
+    if hit is None:
+        if isinstance(item[0], tuple) and item[1] is None: continue   # optional anchor
+        missing.append(alts[0][0][:70]); continue
+    s = s.replace(hit[0], hit[1]); n += 1
 if check: print(f"{len(REPS) - len(missing)}/{len(REPS)} anchors found"); [print("  missing:", m) for m in missing]; sys.exit(1 if missing else 0)
 if missing: sys.exit("anchors not found: " + " | ".join(missing))
 open(path, "w").write(s); print(f"room.js: {n} edits applied")
