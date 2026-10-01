@@ -355,9 +355,9 @@ def export_onepass(model, path_bin, path_json, meta=None):
         nonlocal off; a = t.detach().float().reshape(-1).numpy().astype(np.float16); arrays.append(a); entries[name] = {"offset": off, "shape": list(t.shape)}; off += a.size
     add("emb", model.emb.weight); add("out_table", model.out_table.weight)
     layers = []
-    w, b = pack_conv(model.inp.weight.detach().float()[:, :], model.inp.bias.detach().float())   # cin = c0+1 is not a multiple of 4: pad to c0+4 (mask + 3 zero channels)
-    cin = model.cfg["c0"] + 4; w4 = torch.zeros(model.inp.out_channels, cin, 3, 3); w4[:, :model.cfg["c0"] + 1] = model.inp.weight.detach().float(); wp, bp = pack_conv(w4, model.inp.bias.detach().float())
-    ow, _ = (lambda t: (add("inp.w", t), None))(torch.from_numpy(wp.numpy())); ob, _ = (lambda t: (add("inp.b", t), None))(bp)
+    cin = model.cfg["c0"] + 4;   # cin = c0+1 is not a multiple of 4: pad to c0+4 (mask + 3 zero channels)
+    w4 = torch.zeros(model.inp.out_channels, cin, 3, 3); w4[:, :model.cfg["c0"] + 1] = model.inp.weight.detach().float(); wp, bp = pack_conv(w4, model.inp.bias.detach().float())
+    add("inp.w", torch.from_numpy(wp.numpy())); add("inp.b", bp)
     layers.append({"name": "inp", "cin": cin, "cout": model.inp.out_channels, "k": 3, "relu": True, "residual": None, "w": entries["inp.w"]["offset"], "b": entries["inp.b"]["offset"]})
     for i, c in enumerate(model.convs):
         wp, bp = pack_conv(c.weight.detach().float(), c.bias.detach().float()); add(f"c{i}.w", torch.from_numpy(wp.numpy())); add(f"c{i}.b", bp)
