@@ -1,0 +1,15 @@
+celeba: 500 images, 118s
+celeba: 1000 images, 237s
+celeba: 1500 images, 353s
+wrote /Users/noi3/VQPAINT-research/web/research/data/tokens32_celeba.npy (1500, 1024) 354s
+coco: 500 images, 120s
+coco: 1000 images, 244s
+coco: 1500 images, 434s
+coco: 2000 images, 590s
+coco: 2500 images, 728s
+coco: 3000 images, 863s
+coco: 3500 images, 980s
+coco: 4000 images, 1098s
+coco: 4500 images, 1219s
+coco: 5000 images, 1342s
+wrote /Users/noi3/VQPAINT-research/web/research/data/tokens32_coco.npy (5000, 1024) 1342s

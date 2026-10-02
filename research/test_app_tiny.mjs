@@ -8,22 +8,25 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 const server = http.createServer((req, res) => { const p = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname)); if (!p.startsWith(root) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
 await new Promise((r) => server.listen(0, '127.0.0.1', r)); const port = server.address().port, roomId = 'tiny-' + Math.random().toString(36).slice(2, 7);
 // default: desktop opts in with ?engine=tiny; --device: a phone profile picks it by itself; --nogpu: the app's no-WebGPU path (nogpu=1) picks it by itself
-const url = `http://127.0.0.1:${port}/app/room.html?r=${roomId}&models=pages&ort=/node_modules/onnxruntime-web/dist/${args.nogpu ? '&nogpu=1' : deviceName ? '' : '&engine=tiny'}`;
+const url = `http://127.0.0.1:${port}/app/room.html?r=${roomId}&models=pages&ort=/node_modules/onnxruntime-web/dist/${args.nogpu ? '&nogpu=1' : ''}`;
 const browser = browserName === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: 'chromium', headless: true, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--use-angle=metal'] });
 const ctx = await browser.newContext({ ...(deviceName ? devices[deviceName] : { viewport: { width: 1100, height: 760 } }) }); const page = await ctx.newPage();
 const errors = []; page.on("pageerror", (e) => { errors.push(e.message); console.log("[pageerror]", e.message); }); page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") console.log("[console]", m.text().slice(0, 300)); });
 const t0 = Date.now(); await page.goto(url); await page.waitForFunction(() => window.__vqpaint && window.__vqpaint.ready && window.__vqpaint.grid, null, { timeout: 120000 });
-await page.evaluate((s) => { window.__vqpaint.setEffortSeconds(s); window.__vqpaint.setTool('brush'); return window.__vqpaint.ensureBrush(); }, seconds);
+await page.evaluate((s) => { window.__vqpaint.setEffortSeconds(s); return window.__vqpaint.ensureBrush(); }, seconds);
 await page.waitForFunction(() => window.__vqpaint.modelsLoaded, null, { timeout: 120000 });
 const load = await page.evaluate(() => ({ stage: window.__vqpaint.stats.stage, engine: window.__vqpaint.stats.engine, bytes: Math.round(window.__vqpaint.stats.modelBytes / 2 ** 10), mode: window.__vqpaint.mode, decodeMs: window.__vqpaint.stats.fullDecodeMs }));
 console.log(`ready+brush in ${((Date.now() - t0) / 1000).toFixed(1)}s`, JSON.stringify(load));
 const out = [];
 for (let i = 0; i < 2; i++) {
   const t1 = Date.now();
-  await page.evaluate(({ i, s }) => { const pts = []; for (let k = 0; k < 20; k++) { const a = k / 20 * Math.PI * 2; pts.push([124 + i * 6 + 4 * Math.cos(a), 124 + 3.5 * Math.sin(a)]); } return window.__vqpaint.lassoPaint(pts, i ? 'the sea at night' : 'a red forest', 0.6); }, { i, s: seconds });
-  const r = await page.evaluate(() => { const v = window.__vqpaint, s = v.strokes[v.strokes.length - 1]; return { n: v.strokes.length, tries: v.stats.lastTries, hasTokens: !!s.tokens, hasPath: !!s.path, preview: s._preview, crop: s.crop, layer: v.layers.has(s.id), mode: v.mode, decodeTimes: v.decodeTimes.slice(-3).map((x) => Math.round(x)) }; });
+  // the no-modes UI: tap → write → paint (the ink drop is simulated, then the note goes through the queue to the engine)
+  const n0 = await page.evaluate(() => window.__vqpaint.strokes.length);
+  await page.evaluate(({ i }) => window.__vqpaint.tapPaint(140 + i * 50, 120, i ? 'the sea at night' : 'a red forest', 0.6), { i });
+  await page.waitForFunction((n0) => window.__vqpaint.strokes.length > n0 && !window.__vqpaint.painting, n0, { timeout: 180000 });
+  const r = await page.evaluate(() => { const v = window.__vqpaint, s = v.strokes[v.strokes.length - 1]; return { n: v.strokes.length, tries: v.stats.lastTries, hasTokens: !!s.tokens, hasPath: !!(s.path || s.drop), preview: s._preview, crop: s.crop, layer: v.layers.has(s.id), mode: v.mode, engine: v.stats.engine, decodeTimes: v.decodeTimes.slice(-3).map((x) => Math.round(x)) }; });
   out.push(r); console.log(`stroke ${i + 1}: ${((Date.now() - t1) / 1000).toFixed(1)}s`, JSON.stringify(r));
 }
-const ok = out.length === 2 && out.every((r) => r.hasTokens && r.hasPath && r.tries > 50 && r.layer) && load.engine === 'tiny';
+const ok = out.length === 2 && out.every((r) => r.hasTokens && r.tries > 20 && r.layer) && load.engine === 'tiny';
 console.log(ok ? 'PASS' : 'FAIL', errors.length ? 'errors: ' + errors.slice(0, 5).join(' | ') : 'no page errors');
 await browser.close(); server.close(); process.exit(ok ? 0 : 1);

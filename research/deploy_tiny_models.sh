@@ -8,7 +8,7 @@ if [ ! -d "$OUT/.git" ]; then rm -rf "$OUT"; git clone -q --depth 1 --branch gh-
 cd "$OUT" && git fetch -q --depth 1 origin gh-pages && git reset -q --hard origin/gh-pages
 mkdir -p models/tiny
 # what the app loads: decoder A (+B for slow GPUs), the MobileCLIP image tower, text M, scorer S
-for n in tiny_decoder_A tiny_decoder_B clip_vision tiny_text_M tiny_scorer_S; do for ext in bin json; do f="$WEB/models/tiny/$n.$ext"; [ -f "$f" ] && cp "$f" "models/tiny/$n.$ext"; done; done
+for n in tiny_decoder_A tiny_decoder_B clip_vision clip_vision_i8 tiny_text_M tiny_text_S tiny_scorer_S; do for ext in bin json; do f="$WEB/models/tiny/$n.$ext"; [ -f "$f" ] && cp "$f" "models/tiny/$n.$ext"; done; done
 git add models/tiny
 if git diff --cached --quiet; then echo "tiny models unchanged on gh-pages"; exit 0; fi
 git -c user.name="deploy" -c user.email="deploy@local" commit -q -m "models/tiny: light engine weights ($(git -C "$ROOT" rev-parse --short HEAD) $(date -u +%FT%TZ))"

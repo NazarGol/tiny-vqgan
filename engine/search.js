@@ -53,7 +53,8 @@ export class TokenPainter {
     const nCells = cells.length; if (!nCells) throw new Error('empty mask');
     const neighbors = (c) => { const x = c % crop.w, y = (c - x) / crop.w, out = []; if (x > 0) out.push(c - 1); if (x < crop.w - 1) out.push(c + 1); if (y > 0) out.push(c - crop.w); if (y < crop.h - 1) out.push(c + crop.w); return out; };
     const usable = (c) => !inMask[c];
-    const edge = cells.filter((c) => neighbors(c).some(usable));
+    const grown = (c) => !inMask[c] && base[c] !== blankToken;   // edge cells grow from painted canvas only: on blank canvas the stroke fills its whole shape
+    const edge = cells.filter((c) => neighbors(c).some(grown));
     const rnd = (n) => (Math.random() * n) | 0;
     const parentAt = parent ? (c) => { const x = crop.x + c % crop.w, y = crop.y + (c - c % crop.w) / crop.w; const px = Math.min(parent.crop.w - 1, Math.max(0, x - parent.crop.x)), py = Math.min(parent.crop.h - 1, Math.max(0, y - parent.crop.y)); return parent.tokens[py * parent.crop.w + px]; } : null;
 
@@ -80,7 +81,7 @@ export class TokenPainter {
           cand[c] = fromPhoto ? photoGrid[y * region.w + x] : fromParent ? parentAt(c) : src && Math.random() > 0.15 ? src[y * region.w + x] : sampler.sample();
         }
       }
-      for (const c of edge) if (Math.random() < growEdge) { const nb = neighbors(c).filter(usable); if (nb.length) cand[c] = base[nb[rnd(nb.length)]]; }
+      for (const c of edge) if (Math.random() < growEdge) { const nb = neighbors(c).filter(grown); if (nb.length) cand[c] = base[nb[rnd(nb.length)]]; }
       return cand;
     };
     const copyBlock = (cand, src, sx, sy, dx, dy, s) => {
@@ -99,7 +100,7 @@ export class TokenPainter {
         else if (parentAt && r < bankPatch + 0.12) cand[c] = parentAt(c);
         else if (photoGrid && r < bankPatch + 0.30) copyBlock(cand, photoGrid, cx, cy, cx, cy, 1 + rnd(3));
         else if (r < 0.50) cand[c] = sampler.sample();
-        else if (r < 0.62 && edge.length) { const e = edge[rnd(edge.length)]; const nb = neighbors(e).filter(usable); if (nb.length) cand[e] = base[nb[rnd(nb.length)]]; }
+        else if (r < 0.62 && edge.length) { const e = edge[rnd(edge.length)]; const nb = neighbors(e).filter(grown); if (nb.length) cand[e] = base[nb[rnd(nb.length)]]; }
         else if (r < 0.82) { const nb = neighbors(c); cand[c] = cand[nb[rnd(nb.length)]]; }
         else if (r < 0.95) copyBlock(cand, cur, rnd(region.w), rnd(region.h), cx, cy, 2 + rnd(2));
         else { const c2 = cells[rnd(nCells)]; const t = cand[c]; cand[c] = cand[c2]; cand[c2] = t; }
