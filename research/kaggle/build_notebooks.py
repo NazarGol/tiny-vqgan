@@ -74,9 +74,10 @@ write("tiny_decoder", "vqpaint-tiny-decoder", "vqpaint tiny decoder", nb("VQPAIN
     "tiny", "/kaggle/input/**/vqpaint-tiny-decoder*/tiny/ckpt.pt"))
 write("tiny_scorer", "vqpaint-tiny-scorer", "vqpaint tiny scorer", nb("VQPAINT token scorer (tokens → MobileCLIP image embedding)",
     "Distils teacher decoder + MobileCLIP-S0 vision into a small conv net on the token grid. Output: `/kaggle/working/scorer/`.",
-    '''S = dict(HOURS=2.5, BATCH=32, VARIANTS="S:64:64,96,128,192;M:64:96,128,192,256", BRANCH="research/tiny-vqgan")''',
+    '''S = dict(HOURS=3.0, BATCH=32, VARIANTS="S:64:64,96,128,192;M:64:96,128,192,256", PAIRS=0.6, PAIR_W=10.0, LR=5e-4, WORKERS=3, BRANCH="research/tiny-vqgan")
+# round 2: resumes from the previous version's ckpt (this kernel's own output is attached as a kernel source); HOURS are added''',
     CLIP_DL,
-    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_scorer.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --clip-vision {DATA}/vision_model.onnx --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json"''',
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_scorer.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --pairs {S['PAIRS']} --pair-w {S['PAIR_W']} --lr {S['LR']} --workers {S['WORKERS']} --clip-vision {DATA}/vision_model.onnx --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json"''',
     "scorer", "/kaggle/input/**/vqpaint-tiny-scorer*/scorer/ckpt.pt"))
 TEXT_DL = CLIP_DL + '''ANN = f"{DATA}/annotations"
 if not os.path.exists(f"{ANN}/captions_train2017.json"):
@@ -100,6 +101,8 @@ write("onepass", "vqpaint-onepass", "vqpaint onepass", nb("VQPAINT one-pass star
     ONEPASS_DL,
     '''f"{sys.executable} -u {REPO}/web/research/tiny/gen_onepass_data.py --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json --captions {DATA}/annotations --out {OUT}/onepass_data.npz --n {S['N']} --hours {S['GEN_HOURS']} && {sys.executable} -u {REPO}/web/research/tiny/train_onepass.py --npz {OUT}/onepass_data.npz --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --out {OUT} --hours {S['TRAIN_HOURS']}"''',
     "onepass", "/kaggle/input/**/vqpaint-onepass*/onepass/nothing"))
+m2 = _j.load(open(os.path.join(HERE, "tiny_scorer", "kernel-metadata.json"))); m2["kernel_sources"] = ["noi3noi3/vqpaint-tiny-scorer"]; _j.dump(m2, open(os.path.join(HERE, "tiny_scorer", "kernel-metadata.json"), "w"), indent=1)   # round 2 resumes from its own previous output
 # the onepass kernel also needs the scorer kernel's output
-import json as _j; m = _j.load(open(os.path.join(HERE, "onepass", "kernel-metadata.json"))); m["kernel_sources"] = ["noi3noi3/vqpaint-tiny-scorer"]; _j.dump(m, open(os.path.join(HERE, "onepass", "kernel-metadata.json"), "w"), indent=1)
+import json as _j
+m = _j.load(open(os.path.join(HERE, "onepass", "kernel-metadata.json"))); m["kernel_sources"] = ["noi3noi3/vqpaint-tiny-scorer"]; _j.dump(m, open(os.path.join(HERE, "onepass", "kernel-metadata.json"), "w"), indent=1)
 print("notebooks written")
