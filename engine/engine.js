@@ -3,6 +3,7 @@
 import { GLNN } from '../lib/glnn.js';
 import { TinyDecoderGL } from '../lib/tinydec.js';
 import { TinyScorerGL } from '../lib/tinyscorer.js';
+import { ClipVisionGL } from '../lib/clipvision.js';
 import { Palette } from '../lib/palette.js';
 import { Bank } from '../lib/bank.js';
 import { fetchCached } from '../lib/models.js';
@@ -13,7 +14,7 @@ export class Engine {
    * base: URL of the model files (tiny/, palette/, bank/). variant: decoder variant letter; scorer: scorer variant letter.
    * fetchBuf(url) may be the app's cached fetch; onProgress({url, loaded, total}) per file.
    */
-  static async load({ base, variant = 'A', scorer = 'S', text = 'S', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null } = {}) {
+  static async load({ base, variant = 'A', scorer = 'S', text = 'S', clip = 'clip_vision', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null } = {}) {
     const fb = fetchBuf || ((u) => fetchCached(u, { onProgress }));
     // the text model files are fetched now (so they are cached and counted) but only parsed inside a worker, per note
     const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json' } : null;
@@ -21,11 +22,12 @@ export class Engine {
     const nn = new GLNN();
     // variant 'auto': start with A; if a 256 px decode takes more than ~60 ms on this GPU, switch to the lighter B
     const want = variant === 'auto' ? 'A' : variant;
-    let [dec, sc, palette, bk] = await Promise.all([
+    let [dec, sc, palette, bk, cv] = await Promise.all([
       TinyDecoderGL.load(base + `tiny/tiny_decoder_${want}.json`, base + `tiny/tiny_decoder_${want}.bin`, { fetchBuf: fb, nn }),
-      TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }),
+      scorer ? TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }) : null,
       Palette.load(base + 'palette/'),
       bank ? Bank.load(base + bank + '/').catch((e) => { console.warn('bank', e); return null; }) : null,
+      clip ? ClipVisionGL.load(base + `tiny/${clip}.json`, base + `tiny/${clip}.bin`, { fetchBuf: fb, nn }) : null,   // the real MobileCLIP-S0 image tower (21.7 MB fp16)
     ]);
     if (variant === 'auto') {
       const probe = new Int32Array(256).fill(6328), ms = []; for (let i = 0; i < 4; i++) { dec.decodeRGBA(probe, 16, 16); ms.push(dec.stats.lastMs); }
@@ -33,13 +35,13 @@ export class Engine {
       if (med > 60) { try { const b = await TinyDecoderGL.load(base + 'tiny/tiny_decoder_B.json', base + 'tiny/tiny_decoder_B.bin', { fetchBuf: fb, nn }); dec.release(); dec = b; dec.variant = 'B'; } catch (e) { console.warn('variant B unavailable', e); } }
       dec.probeMs = med; dec.variant ||= 'A';
     }
-    return new Engine({ nn, decoder: dec, scorer: sc, palette, bank: bk, textEncoder, base, textUrls });
+    return new Engine({ nn, decoder: dec, scorer: sc, clip: cv, palette, bank: bk, textEncoder, base, textUrls });
   }
 
-  constructor({ nn, decoder, scorer, palette, bank, textEncoder, base, textUrls = null }) {
-    this.nn = nn; this.decoder = decoder; this.scorer = scorer; this.palette = palette; this.bank = bank; this.textEncoder = textEncoder; this.base = base; this.textUrls = textUrls; this.worker = null;
-    this.painter = new TokenPainter({ scorer, decoder, palette, bank });
-    this.stats = { strokes: 0, lastTries: 0, lastSeconds: 0, decodeMs: () => decoder.stats.lastMs, renderer: nn.renderer, halfRT: nn.halfRT, weightBytes: decoder.weightBytes + scorer.weightBytes };
+  constructor({ nn, decoder, scorer, clip = null, palette, bank, textEncoder, base, textUrls = null }) {
+    this.nn = nn; this.decoder = decoder; this.scorer = scorer; this.clip = clip; this.palette = palette; this.bank = bank; this.textEncoder = textEncoder; this.base = base; this.textUrls = textUrls; this.worker = null;
+    this.painter = new TokenPainter({ scorer, decoder, clip, palette, bank });
+    this.stats = { strokes: 0, lastTries: 0, lastSeconds: 0, decodeMs: () => decoder.stats.lastMs, renderer: nn.renderer, halfRT: nn.halfRT, weightBytes: decoder.weightBytes + (scorer ? scorer.weightBytes : 0) + (clip ? clip.weightBytes : 0) };
   }
 
   /** texts -> unit embeddings (512 each). One Worker holds the tokenizer + tiny text model (~25 MB) off the main thread; it is
@@ -62,11 +64,12 @@ export class Engine {
   /** Object with the Clip.embedText signature, so lib/text.js embedLongText() works unchanged. */
   get clipLike() { return { embedText: (t) => this.encodeText(t) }; }
 
-  /** Paint one stroke. mask {x,y,w,h,cells}; grid {w,h,tokens}; target unit embedding; onPreview({image:{rgba,w,h}, crop, tokens, score, steps, elapsed, final}). */
-  async paintStroke({ grid, mask, target, seconds = 10, onPreview = null, signal = null, ...params }) {
+  /** Paint one stroke. mask {x,y,w,h,cells}; grid {w,h,tokens}; target unit embedding; onPreview({image:{rgba,w,h}, crop, tokens, score, steps, elapsed, final}).
+   *  mode: 'clip' (real MobileCLIP on the tiny decoder's output, default), 'prefilter' (token scorer picks the top few of each batch, real CLIP decides), 'token' (token scorer only; not for production). */
+  async paintStroke({ grid, mask, target, seconds = 10, onPreview = null, signal = null, mode = this.clip ? 'clip' : 'token', ...params }) {
     const t0 = performance.now();
     let res;
-    try { res = await this.painter.paint({ grid, mask, target, seconds, onProgress: onPreview, signal, ...params }); }
+    try { res = await this.painter.paint({ grid, mask, target, seconds, onProgress: onPreview, signal, mode, ...params }); }
     finally { this.nn.trim(this.poolBudget || 24 * 2 ** 20); }   // keep GPU memory flat across strokes of different sizes
     this.stats.strokes++; this.stats.lastTries = res.steps; this.stats.lastSeconds = (performance.now() - t0) / 1000;
     return res;
@@ -75,5 +78,10 @@ export class Engine {
   /** tokens (Int32Array|Uint16Array h*w) -> {rgba, w, h} pixels. */
   decode(tokens, h, w) { return this.decoder.decodeRGBA(tokens, h, w); }
 
-  release() { this.releaseText(); this.decoder.release(); this.scorer.release(); this.nn.destroy(); }
+  /** Unit CLIP embedding of an RGBA8 image (Uint8ClampedArray w*h*4), e.g. a note's photo. */
+  embedImage(rgba, w, h) {
+    if (!this.clip) throw new Error('no CLIP image tower loaded');
+    const gl = this.nn.gl, tex = this.nn.tex(gl.RGBA8, w, h, gl.RGBA, gl.UNSIGNED_BYTE, rgba); this.clip.setInput(tex, w, h); const e = this.clip.embed(); gl.deleteTexture(tex); return e;
+  }
+  release() { this.releaseText(); this.decoder.release(); if (this.scorer) this.scorer.release(); if (this.clip) this.clip.release(); this.nn.destroy(); }
 }

@@ -25,14 +25,17 @@ export function writeRegion(grid, r, tokens) {
 }
 
 export class TokenPainter {
-  constructor({ scorer, decoder, palette, bank = null }) { this.scorer = scorer; this.decoder = decoder; this.palette = palette; this.bank = bank; }
+  constructor({ scorer, decoder, clip = null, palette, bank = null }) { this.scorer = scorer; this.decoder = decoder; this.clip = clip; this.palette = palette; this.bank = bank; }
 
   /**
    * Paint the cells of `mask` ({x,y,w,h,cells}) in `grid` toward `target` (unit embedding).
    * Returns {score, steps, generations, accepted, elapsed, image: {rgba,w,h}, crop, tokens, changed}.
    */
   async paint({ grid, mask, target, seconds = 10, margin = 2, batch = 32, seeds = 8, bankTop = 24, sources = 4, patch = 4, growEdge = 0.8, mutation = 0.08, anneal = 0.003, bankPatch = 0.30,
-                temperature = 0.03, topK = 512, blankToken = -1, parent = null, parentMix = 0.5, photo = null, photoMix = 0.6, onProgress, progressEvery = 300, signal }) {
+                temperature = 0.03, topK = 512, blankToken = -1, parent = null, parentMix = 0.5, photo = null, photoMix = 0.6, onProgress, progressEvery = 300, signal,
+                mode = 'token', clipBatch = 4, prefilterTop = 4 }) {
+    if (mode !== 'token' && !this.clip) throw new Error('mode ' + mode + ' needs the CLIP image tower');
+    if (mode === 'prefilter' && !this.scorer) mode = 'clip';
     const t0 = performance.now();
     const sampler = this.palette.sampler(this.palette.scores(target), { topK, temperature });
     const region = { x: mask.x, y: mask.y, w: mask.w, h: mask.h };
@@ -104,30 +107,41 @@ export class TokenPainter {
     };
     const changedCells = (cand) => { const out = []; for (const c of cells) if (cand[c] !== base[c]) { const x = c % crop.w; out.push([crop.x + x, crop.y + (c - x) / crop.w]); } return out; };
 
-    // seeds: one batch of mosaics
-    this.scorer.setTargets([target]);
+    // real CLIP on the tiny decoder's output (rect crop, resized to 256 like the app's full path); tries = real CLIP evaluations
+    let clipEvals = 0, tokenEvals = 0;
+    const clipScore = (cand) => { const d = this.decoder.decodeToTexture(cand, crop.h, crop.w); this.clip.setInput(d.tex, d.w, d.h); clipEvals++; return this.clip.score()[0]; };
+    const evaluate = (cands) => {   // -> Float32Array of scores for the candidates that were really evaluated, plus their indices
+      if (mode === 'token') { tokenEvals += cands.length; return { idx: cands.map((_, i) => i), scores: scoreBatch(cands) }; }
+      if (mode === 'clip') return { idx: cands.map((_, i) => i), scores: Float32Array.from(cands, clipScore) };
+      const pre = scoreBatch(cands); tokenEvals += cands.length;   // prefilter: top few by the token scorer, real CLIP decides
+      const idx = Array.from(pre.keys()).sort((a, b) => pre[b] - pre[a]).slice(0, Math.min(prefilterTop, cands.length));
+      return { idx, scores: Float32Array.from(idx, (i) => clipScore(cands[i])) };
+    };
+    if (this.scorer) this.scorer.setTargets([target]);
+    if (this.clip && mode !== 'token') this.clip.setTargets([target]);
     await whileHidden();
     let best = null, bestScore = -Infinity, steps = 0, generations = 0, accepted = 0;
-    const seedCands = []; for (let k = 0; k < Math.min(seeds, batch); k++) seedCands.push(mosaic());
-    const seedScores = scoreBatch(seedCands); steps += seedCands.length;
+    const nSeeds = mode === 'clip' ? Math.min(seeds, 6) : Math.min(seeds, batch);
+    const seedCands = []; for (let k = 0; k < nSeeds; k++) seedCands.push(mosaic());
+    const seedEval = evaluate(seedCands), seedScores = new Float32Array(seedCands.length).fill(-Infinity); seedEval.idx.forEach((i, j) => { seedScores[i] = seedEval.scores[j]; }); steps += seedEval.scores.length;
     for (let k = 0; k < seedCands.length; k++) if (seedScores[k] > bestScore) { bestScore = seedScores[k]; best = seedCands[k]; }
     const preview = (final = false) => {
       const img = this.decoder.decodeRGBA(best, crop.h, crop.w);
-      const res = { score: bestScore, steps, generations, accepted, elapsed: elapsed(), image: img, crop, tokens: best, changed: changedCells(best), final };
+      const res = { score: bestScore, steps, generations, accepted, elapsed: elapsed(), image: img, crop, tokens: best, changed: changedCells(best), final, mode, clipEvals, tokenEvals };
       onProgress?.(res); return res;
     };
     let lastReport = 0, pausedMs = 0;
     const elapsed = () => (performance.now() - t0 - pausedMs) / 1000;
     preview();
-    const cands = new Array(batch);
+    const genSize = mode === 'clip' ? clipBatch : batch, cands = new Array(genSize);
     while (best && elapsed() < seconds && !(signal && signal.aborted)) {
       const tp = performance.now(); await whileHidden(); pausedMs += performance.now() - tp;
       const progress = Math.min(1, elapsed() / seconds), rate = mutation * (1 - progress) + 0.01;
-      for (let b = 0; b < batch; b++) { const cand = best.slice(); mutate(cand, rate); cands[b] = cand; }
-      const scores = scoreBatch(cands); steps += batch; generations++;
-      let bi = 0; for (let b = 1; b < batch; b++) if (scores[b] > scores[bi]) bi = b;
-      const temp = anneal * (1 - progress);
-      if (scores[bi] > bestScore || Math.random() < Math.exp((scores[bi] - bestScore) / Math.max(temp, 1e-6))) { if (scores[bi] > bestScore) accepted++; best = cands[bi]; bestScore = scores[bi]; }
+      for (let b = 0; b < genSize; b++) { const cand = best.slice(); mutate(cand, rate); cands[b] = cand; }
+      const ev = evaluate(cands); steps += ev.scores.length; generations++;
+      let bj = 0; for (let j = 1; j < ev.scores.length; j++) if (ev.scores[j] > ev.scores[bj]) bj = j;
+      const bi = ev.idx[bj], sc = ev.scores[bj], temp = anneal * (1 - progress);
+      if (sc > bestScore || Math.random() < Math.exp((sc - bestScore) / Math.max(temp, 1e-6))) { if (sc > bestScore) accepted++; best = cands[bi]; bestScore = sc; }
       if (performance.now() - lastReport > progressEvery) { lastReport = performance.now(); preview(); }
       await yieldUI();
     }

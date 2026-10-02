@@ -11,8 +11,7 @@ REPS = [
  # the brush-on-select line only exists in the older room.js (optional)
  (("if (name === 'brush' && ready && !safeMode && !lowMem) ensureBrush()", "if (name === 'brush' && ready && !safeMode && (!lowMem || useTiny)) ensureBrush()"), None),
  ("    if (lowMem) await releaseBrush();\n", "    if (lowMem && !useTiny) await releaseBrush();\n"),
- ("    if (photo && photo.chw) {   // the photo guides CLIP too", "    if (photo && (useTiny ? photo.tokens : photo.chw)) {   // the photo guides CLIP too (light engine: the scorer's embedding of the photo's tokens)"),
- ("      const [pe] = await clip.embedImages(photo.chw.length", "      const [pe] = useTiny ? [clip.embedTokens(photo.tokens, photo.side)] : await clip.embedImages(photo.chw.length"),
+ ("    if (photo && photo.chw) {   // the photo guides CLIP too", "    if (photo && photo.chw) {   // the photo guides CLIP too (light engine: the shader MobileCLIP image tower)"),
  ("grid, mask, target, seconds: rp.seconds, margin: MARGIN,", "grid, mask, target, seconds: rp.seconds, margin: useTiny ? 2 : MARGIN,"),
  ("let ensuring = null;", "let ensuring = null, engineBridge = null;"),
  ("""  ensuring ||= (async () => {

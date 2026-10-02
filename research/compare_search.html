@@ -12,6 +12,7 @@ import { noisyMask } from '../lib/mask.js';
 import { resizeCHW } from '../lib/image.js';
 import { Engine } from '../engine/engine.js';
 const q = new URLSearchParams(location.search), M = q.get('models') || '/models/', base = q.get('base') || './testmodels/', seconds = +(q.get('seconds') || 8), nPrompts = +(q.get('n') || 10), batch = +(q.get('batch') || 32);
+const MODES = (q.get('modes') || 'clip,prefilter,token').split(',').filter(Boolean);   // engine search modes, one column each
 const PROMPTS = ['a face', 'a red forest', 'the sea at night', 'a city street', 'green hills under a blue sky', 'a cat', 'a lighthouse in a storm', 'a bowl of oranges', 'snow on a mountain', 'a crowded market', 'deadline on Friday', 'a yellow bicycle', 'flowers in a vase', 'a dark room with one candle', 'waves crashing on rocks', 'coffee in the morning'];
 const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
 const res = { ok: false, rows: [] };
@@ -25,27 +26,36 @@ try {
   log('loaded both stacks');
   const realScore = async (tokens, crop, target) => { const img = await decoder.decode(tokens, crop.h, crop.w); const [e] = await clip.embedImages(resizeCHW(img.data, img.w, img.h, 256, 256), 1); return { score: dot(e, target), img }; };
   const toCanvas = (img) => { const c = document.createElement('canvas'); c.width = img.w; c.height = img.h; const g = c.getContext('2d'); const id = g.createImageData(img.w, img.h); if (img.rgba) id.data.set(img.rgba); else { const n = img.w * img.h; for (let i = 0; i < n; i++) { id.data[i * 4] = img.data[i] * 255; id.data[i * 4 + 1] = img.data[n + i] * 255; id.data[i * 4 + 2] = img.data[2 * n + i] * 255; id.data[i * 4 + 3] = 255; } } g.putImageData(id, 0, 0); return c; };
-  const T = 192, sheet = document.getElementById('sheet'); sheet.width = 4 * T + 240; sheet.height = nPrompts * (T + 6) + 24; const sg = sheet.getContext('2d'); sg.fillStyle = '#404040'; sg.fillRect(0, 0, sheet.width, sheet.height);
-  sg.fillStyle = '#fff'; sg.font = '13px sans-serif'; sg.fillText('prompt', 4, 16); sg.fillText('real CLIP search (orig decoder)', 240, 16); sg.fillText('token search (orig decoder)', 240 + T + 4, 16); sg.fillText('token search (tiny decoder)', 240 + 2 * (T + 4), 16); sg.fillText('real CLIP result (tiny decoder)', 240 + 3 * (T + 4), 16);
+  const T = 192, cols = 2 + MODES.length, sheet = document.getElementById('sheet'); sheet.width = cols * (T + 4) + 240; sheet.height = nPrompts * (T + 6) + 24; const sg = sheet.getContext('2d'); sg.fillStyle = '#404040'; sg.fillRect(0, 0, sheet.width, sheet.height);
+  const names = { clip: 'tiny decoder + real CLIP (shaders)', prefilter: 'scorer pre-filter + real CLIP', token: 'token scorer only' };
+  sg.fillStyle = '#fff'; sg.font = '12px sans-serif'; sg.fillText('prompt', 4, 16); sg.fillText('ORT: real CLIP search (orig decoder)', 240, 16);
+  MODES.forEach((m, i) => sg.fillText(names[m] || m, 240 + (i + 1) * (T + 4), 16)); sg.fillText('ORT result through the tiny decoder', 240 + (MODES.length + 1) * (T + 4), 16);
   // canvas: the first half of the prompts paint on blank, the second half over the previous stroke (painted canvas)
   const gridA = { w: 64, h: 64, tokens: new Int32Array(64 * 64).fill(6328) }, gridB = { w: 64, h: 64, tokens: new Int32Array(64 * 64).fill(6328) };
   for (let i = 0; i < nPrompts; i++) {
     const prompt = PROMPTS[i % PROMPTS.length], target = await clip.embedText(prompt);
     const radius = 3.5 + (i % 3), mask = noisyMask({ cx: 20 + (i % 2) * 6, cy: 20 + (i % 2) * 6, radius, gridW: 64, gridH: 64, seed: 100 + i });
+    const before = gridA.tokens.slice();
     const tA = performance.now(); const A = await painter.paint({ grid: gridA, mask, target, seconds, margin: 2 }); const secA = (performance.now() - tA) / 1000;
-    const tB = performance.now(); const B = await eng.paintStroke({ grid: gridB, mask, target, seconds, margin: 2, batch }); const secB = (performance.now() - tB) / 1000;
-    const rA = { score: A.score, img: A.image }, rB = await realScore(B.tokens, B.crop, target);
-    // the scorer's opinion of both results (square crops, via the engine's scorer): A's crop tokens are scored the same way
-    const side = Math.max(A.crop.w, A.crop.h), sqA = new Uint16Array(side * side).fill(6328); for (let y = 0; y < A.crop.h; y++) for (let x = 0; x < A.crop.w; x++) sqA[y * side + x] = A.tokens[y * A.crop.w + x];
-    eng.scorer.setTargets([target]); const scorerA = eng.scorer.score(sqA, side, 1)[0];
-    const row = { prompt, realA: rA.score, realB: rB.score, scorerB: B.score, scorerA, triesA: A.steps, triesB: B.steps, secA, secB, crop: `${B.crop.w}x${B.crop.h}` };
-    res.rows.push(row); log(`${prompt}: real CLIP  A=${rA.score.toFixed(4)} B=${rB.score.toFixed(4)} | scorer A=${scorerA.toFixed(4)} B=${B.score.toFixed(4)} | tries ${A.steps} vs ${B.steps}`);
-    const y = 24 + i * (T + 6); sg.fillStyle = '#fff'; sg.fillText(prompt, 4, y + 14); sg.font = '11px sans-serif'; sg.fillText(`real ${rA.score.toFixed(3)} vs ${rB.score.toFixed(3)}`, 4, y + 32); sg.fillText(`scorer ${scorerA.toFixed(3)} vs ${B.score.toFixed(3)}`, 4, y + 46); sg.fillText(`${A.steps} vs ${B.steps} tries`, 4, y + 60); sg.font = '13px sans-serif';
-    sg.drawImage(toCanvas(rA.img), 240, y, T, T); sg.drawImage(toCanvas(rB.img), 240 + T + 4, y, T, T); sg.drawImage(toCanvas(B.image), 240 + 2 * (T + 4), y, T, T);
-    const tinyA = eng.decode(A.tokens, A.crop.h, A.crop.w); sg.drawImage(toCanvas(tinyA), 240 + 3 * (T + 4), y, T, T);
+    const rA = { score: A.score, img: A.image }; const row = { prompt, crop: `${A.crop.w}x${A.crop.h}`, A: { real: rA.score, tries: A.steps, sec: secA }, modes: {} };
+    const y = 24 + i * (T + 6); sg.fillStyle = '#fff'; sg.font = '12px sans-serif'; sg.fillText(prompt, 4, y + 14); sg.font = '10px sans-serif'; sg.fillText(`ORT: real ${rA.score.toFixed(3)}, ${A.steps} tries, ${secA.toFixed(1)} s`, 4, y + 30);
+    sg.drawImage(toCanvas(rA.img), 240, y, T, T);
+    for (let mi = 0; mi < MODES.length; mi++) {
+      const mode = MODES[mi]; gridB.tokens.set(gridA.tokens);   // same starting canvas as A for every mode (A's result is not copied: reset to the pre-stroke state)
+      gridB.tokens.set(before);
+      const tB = performance.now(); const B = await eng.paintStroke({ grid: gridB, mask, target, seconds, margin: 2, batch, mode }); const secB = (performance.now() - tB) / 1000;
+      const rB = await realScore(B.tokens, B.crop, target);
+      row.modes[mode] = { real: rB.score, own: B.score, tries: B.steps, clipEvals: B.clipEvals, tokenEvals: B.tokenEvals, sec: secB };
+      sg.fillText(`${mode}: real ${rB.score.toFixed(3)} (own ${B.score.toFixed(3)}), ${B.steps} tries, ${secB.toFixed(1)} s`, 4, y + 44 + mi * 13);
+      sg.drawImage(toCanvas(rB.img), 240 + (mi + 1) * (T + 4), y, T, T);
+      if (mi === MODES.length - 1) { const tinyA = eng.decode(A.tokens, A.crop.h, A.crop.w); sg.drawImage(toCanvas(tinyA), 240 + (mi + 2) * (T + 4), y, T, T); }
+    }
+    gridB.tokens.set(gridA.tokens);   // next prompt paints over A's result on both grids (same canvas)
+    res.rows.push(row); log(`${prompt}: ORT ${rA.score.toFixed(3)} (${A.steps} tries) | ` + MODES.map((m) => `${m} ${row.modes[m].real.toFixed(3)} (${row.modes[m].tries} tries, ${row.modes[m].sec.toFixed(1)}s)`).join(' | '));
   }
-  const mean = (k) => res.rows.reduce((s, r) => s + r[k], 0) / res.rows.length;
-  res.summary = { meanRealA: mean('realA'), meanRealB: mean('realB'), meanScorerB: mean('scorerB'), meanScorerA: mean('scorerA'), bWins: res.rows.filter((r) => r.realB >= r.realA).length, scorerGap: mean('scorerB') - mean('realB') };
+  const mean = (f) => res.rows.reduce((s, r) => s + f(r), 0) / res.rows.length;
+  res.summary = { meanRealA: mean((r) => r.A.real), meanSecA: mean((r) => r.A.sec) };
+  for (const m of MODES) res.summary[m] = { meanReal: mean((r) => r.modes[m].real), wins: res.rows.filter((r) => r.modes[m].real >= r.A.real).length, meanSec: mean((r) => r.modes[m].sec), meanTries: mean((r) => r.modes[m].tries), ownMinusReal: mean((r) => r.modes[m].own - r.modes[m].real) };
   log(JSON.stringify(res.summary)); res.ok = true;
 } catch (e) { res.error = e.message + '\n' + e.stack; log('ERROR ' + e.message); console.error(e); }
 window.__result = res;
