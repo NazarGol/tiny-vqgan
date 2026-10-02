@@ -33,7 +33,7 @@ export class TokenPainter {
    */
   async paint({ grid, mask, target, seconds = 10, margin = 2, batch = 32, seeds = 8, bankTop = 24, sources = 4, patch = 4, growEdge = 0.8, mutation = 0.08, anneal = 0.003, bankPatch = 0.30,
                 temperature = 0.03, topK = 512, blankToken = -1, parent = null, parentMix = 0.5, photo = null, photoMix = 0.6, onProgress, progressEvery = 300, signal,
-                mode = 'token', clipBatch = 4, prefilterTop = 4 }) {
+                mode = 'token', clipBatch = 4, prefilterTop = 4, poolBudget = 32 * 2 ** 20 }) {
     if (mode !== 'token' && !this.clip) throw new Error('mode ' + mode + ' needs the CLIP image tower');
     if (mode === 'prefilter' && !this.scorer) mode = 'clip';
     const t0 = performance.now();
@@ -143,6 +143,7 @@ export class TokenPainter {
       const bi = ev.idx[bj], sc = ev.scores[bj], temp = anneal * (1 - progress);
       if (sc > bestScore || Math.random() < Math.exp((sc - bestScore) / Math.max(temp, 1e-6))) { if (sc > bestScore) accepted++; best = cands[bi]; bestScore = sc; }
       if (performance.now() - lastReport > progressEvery) { lastReport = performance.now(); preview(); }
+      this.decoder.nn.trim(poolBudget);   // keep the GPU working set bounded during the stroke (big crops on phones)
       await yieldUI();
     }
     if (!best) throw new Error('aborted before any candidate was scored');

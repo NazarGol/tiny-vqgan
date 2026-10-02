@@ -8,7 +8,6 @@ REPS = [
  ("const lowMem = isPhone || safeMode || params.get('lowmem') === '1';", "const lowMem = isPhone || safeMode || params.get('lowmem') === '1';\nlet useTiny = params.get('engine') === 'tiny';   // the light engine (tiny decoder + MobileCLIP as WebGL2 shaders, no ONNX Runtime): default on phones and without WebGPU, ?engine=ort forces the ONNX worker"),
  ("const engine = new Engine();", "let engine = new Engine();"),
  ("function canPaintHere() { if (forceNoPaint || safeMode || engine.broken) return false; if (!lowMem) return true;", "function canPaintHere() { if (forceNoPaint || safeMode || engine.broken) return false; if (useTiny) return true; if (!lowMem) return true;"),
- ("const MAX_R = lowMem ? 4 : 12, BASE_R = lowMem ? 3 : 4.5;", "const MAX_R = useTiny ? 8 : lowMem ? 4 : 12, BASE_R = useTiny ? 4 : lowMem ? 3 : 4.5;"),
  ("if (h && (forceNoPaint || lowMem || !caps.gpu)) return requestHelp(", "if (h && (forceNoPaint || (!useTiny && (lowMem || !caps.gpu)))) return requestHelp("),
  ("if (h && (forceNoPaint || lowMem || !caps.gpu)) return requestReaction(", "if (h && (forceNoPaint || (!useTiny && (lowMem || !caps.gpu)))) return requestReaction("),
  ("margin: MARGIN,", "margin: useTiny ? 2 : MARGIN,"),
