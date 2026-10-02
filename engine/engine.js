@@ -7,6 +7,22 @@ import { ClipVisionGL } from '../lib/clipvision.js';
 import { Palette } from '../lib/palette.js';
 import { Bank } from '../lib/bank.js';
 import { fetchCached } from '../lib/models.js';
+
+/** Low-memory model fetch for first visits: stream the response straight into Cache Storage (no JS copy), then read it back once.
+ *  WebKit holds several copies of a body fetched into JS (a 22 MB file cost +77 MB plain, +134 MB with put(clone) + read). */
+export async function fetchLowMem(url, { onProgress = null, cacheName = 'vqpaint-models-v1', mirror = null } = {}) {
+  let cache = null; try { cache = await caches.open(cacheName); } catch (_) { cache = null; }
+  const tryUrls = mirror ? [url, mirror(url)].filter(Boolean) : [url];
+  if (cache) {
+    for (const u of tryUrls) { const hit = await cache.match(u); if (hit) { const buf = await hit.arrayBuffer(); onProgress?.({ url, loaded: buf.byteLength, total: buf.byteLength, cached: true }); return buf; } }
+    for (const u of tryUrls) {
+      try { const resp = await fetch(u); if (!resp.ok) throw new Error(`fetch ${u}: ${resp.status}`); onProgress?.({ url, loaded: 0, total: +resp.headers.get('content-length') || 0, cached: false }); await cache.put(u, resp); }
+      catch (e) { if (u === tryUrls[tryUrls.length - 1]) throw e; console.warn('model host failed, trying the fallback:', e && e.message); continue; }
+      const hit = await cache.match(u); if (hit) { const buf = await hit.arrayBuffer(); onProgress?.({ url, loaded: buf.byteLength, total: buf.byteLength, cached: false }); return buf; }
+    }
+  }
+  return fetchCached(url, { onProgress, cacheName });
+}
 import { TokenPainter } from './search.js';
 
 export class Engine {
@@ -15,26 +31,26 @@ export class Engine {
    * fetchBuf(url) may be the app's cached fetch; onProgress({url, loaded, total}) per file.
    */
   static async load({ base, variant = 'A', scorer = 'S', text = 'S', clip = 'clip_vision', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null } = {}) {
-    const fb = fetchBuf || ((u) => fetchCached(u, { onProgress }));
+    const fb = fetchBuf || ((u) => fetchLowMem(u, { onProgress }));
     // the text model files are fetched now (so they are cached and counted) but only parsed inside a worker, per note
     const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json' } : null;
     if (textUrls) await Promise.all([fb(textUrls.tokenizerUrl), fb(textUrls.jsonUrl), fb(textUrls.binUrl)]);   // cached; the worker parses them
     const nn = new GLNN();
     // variant 'auto': start with A; if a 256 px decode takes more than ~60 ms on this GPU, switch to the lighter B
     const want = variant === 'auto' ? 'A' : variant;
-    let [dec, sc, palette, bk, cv] = await Promise.all([
-      TinyDecoderGL.load(base + `tiny/tiny_decoder_${want}.json`, base + `tiny/tiny_decoder_${want}.bin`, { fetchBuf: fb, nn }),
-      scorer ? TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }) : null,
-      Palette.load(base + 'palette/'),
-      bank ? Bank.load(base + bank + '/').catch((e) => { console.warn('bank', e); return null; }) : null,
-      clip ? ClipVisionGL.load(base + `tiny/${clip}.json`, base + `tiny/${clip}.bin`, { fetchBuf: fb, nn }) : null,   // the real MobileCLIP-S0 image tower (21.7 MB fp16)
-    ]);
+    // one model at a time: each download buffer is released before the next one is held
+    let dec = await TinyDecoderGL.load(base + `tiny/tiny_decoder_${want}.json`, base + `tiny/tiny_decoder_${want}.bin`, { fetchBuf: fb, nn });
+    const sc = scorer ? await TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }) : null;
+    const cv = clip ? await ClipVisionGL.load(base + `tiny/${clip}.json`, base + `tiny/${clip}.bin`, { fetchBuf: fb, nn }) : null;   // the real MobileCLIP-S0 image tower (21.7 MB fp16)
+    const palette = await Palette.load(base + 'palette/');
+    const bk = bank ? await Bank.load(base + bank + '/').catch((e) => { console.warn('bank', e); return null; }) : null;
     if (variant === 'auto') {
       const probe = new Int32Array(256).fill(6328), ms = []; for (let i = 0; i < 4; i++) { dec.decodeRGBA(probe, 16, 16); ms.push(dec.stats.lastMs); }
       const med = ms.sort((a, b) => a - b)[2];
       if (med > 60) { try { const b = await TinyDecoderGL.load(base + 'tiny/tiny_decoder_B.json', base + 'tiny/tiny_decoder_B.bin', { fetchBuf: fb, nn }); dec.release(); dec = b; dec.variant = 'B'; } catch (e) { console.warn('variant B unavailable', e); } }
       dec.probeMs = med; dec.variant ||= 'A';
     }
+    dec.m = { emb: dec.m.emb, widths: dec.m.widths }; if (cv) cv.m = { input: cv.m.input, ops: cv.m.ops.length };   // manifests are not needed after load
     return new Engine({ nn, decoder: dec, scorer: sc, clip: cv, palette, bank: bk, textEncoder, base, textUrls });
   }
 

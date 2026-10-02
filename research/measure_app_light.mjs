@@ -12,7 +12,11 @@ const pattern = browserName === 'webkit' ? 'ms-playwright/webkit' : 'ms-playwrig
 const wc = () => { try { return execSync(`ps -axo rss=,command= | grep -F '${pattern}' | grep -F -e WebContent -e 'type=renderer' | grep -v grep | sort -rn | head -1 | awk '{print $1+0}'`).toString().trim() * 1 || 0; } catch { return 0; } };
 const gpu = () => { try { return execSync(`ps -axo rss=,command= | grep -F '${pattern}' | grep -F -e 'WebKit.GPU' -e 'type=gpu-process' | grep -v grep | sort -rn | head -1 | awk '{print $1+0}'`).toString().trim() * 1 || 0; } catch { return 0; } };
 const browser = browserName === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: 'chromium', headless: true, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--use-angle=metal'] });
-const ctx = await browser.newContext({ ...(devices[deviceName] || {}) }); const page = await ctx.newPage(); await page.goto('about:blank'); await page.waitForTimeout(1000);
+const ctx = await browser.newContext({ ...(devices[deviceName] || {}) }); const page = await ctx.newPage();
+if (args.twice) {   // warm Cache Storage first (a second visit), then measure a fresh page in the same context
+  await page.goto(url); await page.waitForFunction(() => window.__vqpaint && window.__vqpaint.ready, null, { timeout: 120000 }); await page.evaluate(() => window.__vqpaint.ensureBrush()); await page.waitForTimeout(1000); await page.goto('about:blank'); await page.waitForTimeout(3000);
+}
+await page.goto('about:blank'); await page.waitForTimeout(1000);
 const b0 = wc(), g0 = gpu(); const mark = (label) => console.log(`${label.padEnd(26)} WebContent +${Math.round((wc() - b0) / 1024)} MB   GPU process +${Math.round((gpu() - g0) / 1024)} MB`);
 let peak = 0; const timer = setInterval(() => { peak = Math.max(peak, wc() - b0); }, 200);
 await page.goto(url); await page.waitForFunction(() => window.__vqpaint && window.__vqpaint.ready && window.__vqpaint.grid, null, { timeout: 120000 }); await page.waitForTimeout(1500); mark('page ready (viewing)');
