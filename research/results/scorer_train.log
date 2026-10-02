@@ -1,0 +1,163 @@
+student on cuda:0 teacher on cuda:1
+CLIP vision providers: ['CUDAExecutionProvider', 'CPUExecutionProvider']
+Working with z of shape (1, 256, 16, 16) = 65536 dimensions.
+grids: 10000 x16, 6500 x32
+variant S: c0 64 widths (64, 96, 128, 192) params 2.73 M -> fp16 5.2 MiB
+variant M: c0 64 widths (96, 128, 192, 256) params 3.82 M -> fp16 7.3 MiB
+text embeddings for 40 prompts
+step 73 0.02h lr 3.65e-04 S=8 S: 1-cos 0.5857 pair 0.955 | M: 1-cos 0.5908 pair 0.954  38.8 img/s q=0
+step 138 0.03h lr 6.90e-04 S=14 S: 1-cos 0.3514 pair 0.953 | M: 1-cos 0.3519 pair 0.953  34.0 img/s q=0
+step 197 0.05h lr 9.84e-04 S=10 S: 1-cos 0.3753 pair 0.956 | M: 1-cos 0.3759 pair 0.956  31.2 img/s q=0
+step 267 0.07h lr 9.98e-04 S=6 S: 1-cos 0.3454 pair 0.941 | M: 1-cos 0.3458 pair 0.941  37.2 img/s q=0
+step 319 0.08h lr 9.97e-04 S=12 S: 1-cos 0.3756 pair 0.955 | M: 1-cos 0.3773 pair 0.955  27.5 img/s q=0
+step 392 0.10h lr 9.96e-04 S=20 S: 1-cos 0.3291 pair 0.942 | M: 1-cos 0.3396 pair 0.941  37.5 img/s q=0
+step 454 0.12h lr 9.95e-04 S=20 S: 1-cos 0.3410 pair 0.959 | M: 1-cos 0.3526 pair 0.957  32.8 img/s q=0
+step 532 0.14h lr 9.93e-04 S=20 S: 1-cos 0.3263 pair 0.944 | M: 1-cos 0.3399 pair 0.939  40.1 img/s q=0
+step 591 0.15h lr 9.91e-04 S=16 S: 1-cos 0.3393 pair 0.946 | M: 1-cos 0.3561 pair 0.947  31.5 img/s q=0
+step 650 0.17h lr 9.89e-04 S=14 S: 1-cos 0.3403 pair 0.957 | M: 1-cos 0.3549 pair 0.954  30.8 img/s q=0
+step 708 0.19h lr 9.87e-04 S=16 S: 1-cos 0.3353 pair 0.951 | M: 1-cos 0.3527 pair 0.953  30.7 img/s q=0
+step 763 0.20h lr 9.85e-04 S=16 S: 1-cos 0.3507 pair 0.951 | M: 1-cos 0.3681 pair 0.953  28.7 img/s q=0
+step 821 0.22h lr 9.82e-04 S=20 S: 1-cos 0.3306 pair 0.944 | M: 1-cos 0.3533 pair 0.943  30.6 img/s q=0
+step 875 0.24h lr 9.79e-04 S=16 S: 1-cos 0.3329 pair 0.942 | M: 1-cos 0.3564 pair 0.945  28.2 img/s q=0
+step 929 0.25h lr 9.76e-04 S=20 S: 1-cos 0.3393 pair 0.967 | M: 1-cos 0.3628 pair 0.966  28.5 img/s q=0
+step 1003 0.27h lr 9.73e-04 S=16 S: 1-cos 0.3146 pair 0.937 | M: 1-cos 0.3329 pair 0.943  39.2 img/s q=0
+step 1058 0.29h lr 9.69e-04 S=12 S: 1-cos 0.3361 pair 0.965 | M: 1-cos 0.3553 pair 0.969  28.9 img/s q=0
+step 1117 0.30h lr 9.66e-04 S=8 S: 1-cos 0.3323 pair 0.947 | M: 1-cos 0.3466 pair 0.950  31.5 img/s q=0
+step 1170 0.32h lr 9.62e-04 S=12 S: 1-cos 0.3375 pair 0.961 | M: 1-cos 0.3523 pair 0.962  28.0 img/s q=0
+step 1224 0.34h lr 9.58e-04 S=14 S: 1-cos 0.3300 pair 0.954 | M: 1-cos 0.3464 pair 0.957  28.6 img/s q=0
+step 1291 0.35h lr 9.54e-04 S=16 S: 1-cos 0.3099 pair 0.911 | M: 1-cos 0.3276 pair 0.914  35.2 img/s q=0
+step 1362 0.37h lr 9.49e-04 S=16 S: 1-cos 0.3121 pair 0.956 | M: 1-cos 0.3298 pair 0.960  37.8 img/s q=0
+step 1422 0.39h lr 9.45e-04 S=16 S: 1-cos 0.3264 pair 0.942 | M: 1-cos 0.3406 pair 0.947  32.0 img/s q=0
+step 1482 0.40h lr 9.40e-04 S=16 S: 1-cos 0.3229 pair 0.963 | M: 1-cos 0.3327 pair 0.967  31.7 img/s q=0
+step 1536 0.42h lr 9.35e-04 S=16 S: 1-cos 0.3261 pair 0.941 | M: 1-cos 0.3349 pair 0.944  28.1 img/s q=0
+step 1590 0.44h lr 9.30e-04 S=20 S: 1-cos 0.3254 pair 0.958 | M: 1-cos 0.3353 pair 0.959  27.9 img/s q=0
+step 1646 0.46h lr 9.24e-04 S=20 S: 1-cos 0.3224 pair 0.960 | M: 1-cos 0.3288 pair 0.961  29.9 img/s q=0
+step 1697 0.47h lr 9.19e-04 S=16 S: 1-cos 0.3299 pair 0.960 | M: 1-cos 0.3392 pair 0.962  26.9 img/s q=0
+step 1755 0.49h lr 9.13e-04 S=20 S: 1-cos 0.3204 pair 0.933 | M: 1-cos 0.3274 pair 0.934  29.9 img/s q=0
+[eval step 1791] {"S": {"cos_grids": 0.6622403264045715, "cos_strokes": 0.6674548387527466, "pearson": 0.24169814586639404, "spearman": 0.2276767042982668, "pair_sign_agree": 0.5389880952380952, "pair_delta_corr": 0.0891818106174469, "pair_sign_agree_big": 0.5096069868995633}, "M": {"cos_grids": 0.648228645324707, "cos_strokes": 0.6856676936149597, "pearson": 0.18952031433582306, "spearman": 0.1956556474209697, "pair_sign_agree": 0.5458333333333333, "pair_delta_corr": 0.04690033942461014, "pair_sign_agree_big": 0.5139737991266375}}
+step 1817 0.51h lr 9.07e-04 S=14 S: 1-cos 0.3109 pair 0.954 | M: 1-cos 0.3214 pair 0.955  32.4 img/s q=0
+step 1866 0.52h lr 9.01e-04 S=16 S: 1-cos 0.3292 pair 0.961 | M: 1-cos 0.3382 pair 0.963  25.8 img/s q=0
+step 1928 0.54h lr 8.95e-04 S=12 S: 1-cos 0.3107 pair 0.936 | M: 1-cos 0.3200 pair 0.938  32.9 img/s q=0
+step 1978 0.56h lr 8.88e-04 S=12 S: 1-cos 0.3278 pair 0.954 | M: 1-cos 0.3387 pair 0.955  26.3 img/s q=0
+step 2043 0.57h lr 8.81e-04 S=20 S: 1-cos 0.3054 pair 0.941 | M: 1-cos 0.3179 pair 0.961  33.5 img/s q=0
+step 2111 0.59h lr 8.75e-04 S=10 S: 1-cos 0.3078 pair 0.964 | M: 1-cos 0.3183 pair 0.963  36.2 img/s q=0
+step 2177 0.61h lr 8.68e-04 S=10 S: 1-cos 0.3055 pair 0.906 | M: 1-cos 0.3186 pair 0.909  34.9 img/s q=0
+step 2233 0.62h lr 8.61e-04 S=16 S: 1-cos 0.3134 pair 0.957 | M: 1-cos 0.3273 pair 0.961  29.4 img/s q=0
+step 2293 0.64h lr 8.54e-04 S=6 S: 1-cos 0.3001 pair 0.963 | M: 1-cos 0.3177 pair 0.965  31.9 img/s q=0
+step 2348 0.66h lr 8.46e-04 S=12 S: 1-cos 0.3116 pair 0.955 | M: 1-cos 0.3302 pair 0.957  28.9 img/s q=0
+step 2408 0.68h lr 8.39e-04 S=12 S: 1-cos 0.2996 pair 0.958 | M: 1-cos 0.3167 pair 0.963  31.6 img/s q=0
+step 2475 0.69h lr 8.31e-04 S=12 S: 1-cos 0.2989 pair 0.941 | M: 1-cos 0.3139 pair 0.946  35.4 img/s q=0
+step 2535 0.71h lr 8.24e-04 S=12 S: 1-cos 0.3038 pair 0.956 | M: 1-cos 0.3220 pair 0.960  31.7 img/s q=0
+step 2599 0.73h lr 8.16e-04 S=16 S: 1-cos 0.2941 pair 0.941 | M: 1-cos 0.3146 pair 0.943  33.6 img/s q=0
+step 2663 0.74h lr 8.08e-04 S=8 S: 1-cos 0.2928 pair 0.940 | M: 1-cos 0.3158 pair 0.941  34.1 img/s q=0
+step 2725 0.76h lr 7.99e-04 S=16 S: 1-cos 0.2989 pair 0.941 | M: 1-cos 0.3199 pair 0.942  32.4 img/s q=0
+step 2798 0.78h lr 7.91e-04 S=10 S: 1-cos 0.2857 pair 0.934 | M: 1-cos 0.3049 pair 0.938  38.7 img/s q=0
+step 2865 0.79h lr 7.83e-04 S=20 S: 1-cos 0.2842 pair 0.936 | M: 1-cos 0.3052 pair 0.939  35.3 img/s q=0
+step 2918 0.81h lr 7.74e-04 S=12 S: 1-cos 0.3099 pair 0.957 | M: 1-cos 0.3273 pair 0.960  28.2 img/s q=0
+step 2977 0.83h lr 7.66e-04 S=16 S: 1-cos 0.2938 pair 0.934 | M: 1-cos 0.3172 pair 0.940  30.8 img/s q=0
+step 3043 0.84h lr 7.57e-04 S=16 S: 1-cos 0.2944 pair 0.916 | M: 1-cos 0.3191 pair 0.920  34.6 img/s q=0
+step 3099 0.86h lr 7.48e-04 S=6 S: 1-cos 0.3046 pair 0.940 | M: 1-cos 0.3269 pair 0.942  29.8 img/s q=0
+step 3169 0.88h lr 7.39e-04 S=16 S: 1-cos 0.2844 pair 0.944 | M: 1-cos 0.3063 pair 0.946  36.8 img/s q=0
+step 3224 0.89h lr 7.30e-04 S=16 S: 1-cos 0.2975 pair 0.954 | M: 1-cos 0.3239 pair 0.954  28.7 img/s q=0
+step 3285 0.91h lr 7.21e-04 S=12 S: 1-cos 0.2938 pair 0.950 | M: 1-cos 0.3171 pair 0.955  32.4 img/s q=0
+step 3349 0.93h lr 7.12e-04 S=10 S: 1-cos 0.2799 pair 0.946 | M: 1-cos 0.3080 pair 0.948  34.1 img/s q=0
+step 3404 0.95h lr 7.03e-04 S=14 S: 1-cos 0.3020 pair 0.975 | M: 1-cos 0.3261 pair 0.978  29.0 img/s q=0
+step 3468 0.96h lr 6.93e-04 S=14 S: 1-cos 0.2873 pair 0.939 | M: 1-cos 0.3131 pair 0.943  34.1 img/s q=0
+step 3530 0.98h lr 6.84e-04 S=16 S: 1-cos 0.2844 pair 0.959 | M: 1-cos 0.3093 pair 0.962  32.8 img/s q=0
+step 3604 1.00h lr 6.74e-04 S=20 S: 1-cos 0.2811 pair 0.922 | M: 1-cos 0.3022 pair 0.926  39.1 img/s q=0
+[eval step 3624] {"S": {"cos_grids": 0.6940580010414124, "cos_strokes": 0.7283602952957153, "pearson": 0.3744966983795166, "spearman": 0.3669889915179977, "pair_sign_agree": 0.5300595238095238, "pair_delta_corr": 0.08445274829864502, "pair_sign_agree_big": 0.5043668122270742}, "M": {"cos_grids": 0.6731491088867188, "cos_strokes": 0.697726309299469, "pearson": 0.21574965119361877, "spearman": 0.2043389763161758, "pair_sign_agree": 0.5375, "pair_delta_corr": 0.04663654416799545, "pair_sign_agree_big": 0.5179039301310043}}
+step 3667 1.01h lr 6.65e-04 S=16 S: 1-cos 0.2793 pair 0.925 | M: 1-cos 0.3121 pair 0.932  32.9 img/s q=0
+step 3732 1.03h lr 6.55e-04 S=10 S: 1-cos 0.2829 pair 0.940 | M: 1-cos 0.3103 pair 0.939  34.4 img/s q=0
+step 3791 1.05h lr 6.45e-04 S=20 S: 1-cos 0.2819 pair 0.954 | M: 1-cos 0.3081 pair 0.955  31.1 img/s q=0
+step 3852 1.06h lr 6.36e-04 S=16 S: 1-cos 0.2942 pair 0.931 | M: 1-cos 0.3188 pair 0.934  31.8 img/s q=0
+step 3905 1.08h lr 6.26e-04 S=20 S: 1-cos 0.2935 pair 0.941 | M: 1-cos 0.3226 pair 0.946  27.9 img/s q=0
+step 3957 1.10h lr 6.16e-04 S=16 S: 1-cos 0.3016 pair 0.965 | M: 1-cos 0.3275 pair 0.966  27.2 img/s q=0
+step 4016 1.11h lr 6.06e-04 S=16 S: 1-cos 0.2899 pair 0.941 | M: 1-cos 0.3137 pair 0.944  31.1 img/s q=0
+step 4075 1.13h lr 5.96e-04 S=16 S: 1-cos 0.2957 pair 0.961 | M: 1-cos 0.3205 pair 0.966  30.9 img/s q=0
+step 4132 1.15h lr 5.86e-04 S=8 S: 1-cos 0.2883 pair 0.950 | M: 1-cos 0.3114 pair 0.957  30.2 img/s q=0
+step 4197 1.16h lr 5.76e-04 S=20 S: 1-cos 0.2763 pair 0.924 | M: 1-cos 0.3064 pair 0.926  33.7 img/s q=0
+step 4257 1.18h lr 5.66e-04 S=14 S: 1-cos 0.2894 pair 0.949 | M: 1-cos 0.3208 pair 0.955  31.7 img/s q=0
+step 4321 1.20h lr 5.56e-04 S=20 S: 1-cos 0.2829 pair 0.930 | M: 1-cos 0.3126 pair 0.938  33.5 img/s q=0
+step 4380 1.22h lr 5.46e-04 S=14 S: 1-cos 0.2852 pair 0.936 | M: 1-cos 0.3135 pair 0.938  31.1 img/s q=0
+step 4436 1.23h lr 5.36e-04 S=12 S: 1-cos 0.2956 pair 0.955 | M: 1-cos 0.3183 pair 0.960  29.5 img/s q=0
+step 4495 1.25h lr 5.25e-04 S=12 S: 1-cos 0.2921 pair 0.940 | M: 1-cos 0.3154 pair 0.949  31.0 img/s q=0
+step 4556 1.27h lr 5.16e-04 S=20 S: 1-cos 0.2793 pair 0.918 | M: 1-cos 0.3108 pair 0.924  32.4 img/s q=0
+step 4613 1.28h lr 5.06e-04 S=12 S: 1-cos 0.2888 pair 0.940 | M: 1-cos 0.3129 pair 0.944  30.2 img/s q=0
+step 4667 1.30h lr 4.95e-04 S=14 S: 1-cos 0.2857 pair 0.947 | M: 1-cos 0.3163 pair 0.954  28.2 img/s q=0
+step 4725 1.32h lr 4.85e-04 S=14 S: 1-cos 0.2911 pair 0.942 | M: 1-cos 0.3199 pair 0.949  30.4 img/s q=0
+step 4797 1.33h lr 4.75e-04 S=10 S: 1-cos 0.2704 pair 0.929 | M: 1-cos 0.2997 pair 0.935  38.4 img/s q=0
+step 4857 1.35h lr 4.65e-04 S=20 S: 1-cos 0.2835 pair 0.946 | M: 1-cos 0.3091 pair 0.950  31.9 img/s q=0
+step 4916 1.37h lr 4.56e-04 S=4 S: 1-cos 0.2835 pair 0.954 | M: 1-cos 0.3122 pair 0.961  31.4 img/s q=0
+step 4981 1.38h lr 4.46e-04 S=20 S: 1-cos 0.2795 pair 0.943 | M: 1-cos 0.3069 pair 0.945  34.4 img/s q=0
+step 5036 1.40h lr 4.36e-04 S=8 S: 1-cos 0.2855 pair 0.921 | M: 1-cos 0.3161 pair 0.928  29.2 img/s q=0
+step 5094 1.42h lr 4.26e-04 S=10 S: 1-cos 0.2832 pair 0.935 | M: 1-cos 0.3117 pair 0.937  30.9 img/s q=0
+step 5148 1.43h lr 4.16e-04 S=20 S: 1-cos 0.2957 pair 0.963 | M: 1-cos 0.3231 pair 0.965  28.5 img/s q=0
+step 5208 1.45h lr 4.07e-04 S=20 S: 1-cos 0.2787 pair 0.936 | M: 1-cos 0.3124 pair 0.945  31.9 img/s q=0
+step 5264 1.47h lr 3.97e-04 S=8 S: 1-cos 0.2885 pair 0.951 | M: 1-cos 0.3193 pair 0.961  29.8 img/s q=0
+step 5325 1.48h lr 3.87e-04 S=16 S: 1-cos 0.2783 pair 0.950 | M: 1-cos 0.3072 pair 0.957  32.1 img/s q=0
+step 5383 1.50h lr 3.78e-04 S=10 S: 1-cos 0.2886 pair 0.949 | M: 1-cos 0.3134 pair 0.956  30.9 img/s q=0
+[eval step 5385] {"S": {"cos_grids": 0.7099246978759766, "cos_strokes": 0.7414657473564148, "pearson": 0.40956124663352966, "spearman": 0.39736239693056835, "pair_sign_agree": 0.5383928571428571, "pair_delta_corr": 0.06710278987884521, "pair_sign_agree_big": 0.5152838427947598}, "M": {"cos_grids": 0.6820124387741089, "cos_strokes": 0.7076791524887085, "pearson": 0.2279191017150879, "spearman": 0.21176339754936616, "pair_sign_agree": 0.5449404761904761, "pair_delta_corr": 0.09255623817443848, "pair_sign_agree_big": 0.525764192139738}}
+step 5451 1.52h lr 3.68e-04 S=16 S: 1-cos 0.2799 pair 0.949 | M: 1-cos 0.3057 pair 0.953  35.7 img/s q=0
+step 5505 1.53h lr 3.59e-04 S=20 S: 1-cos 0.2972 pair 0.956 | M: 1-cos 0.3227 pair 0.961  28.6 img/s q=0
+step 5564 1.55h lr 3.49e-04 S=20 S: 1-cos 0.2805 pair 0.920 | M: 1-cos 0.3086 pair 0.927  30.9 img/s q=0
+step 5630 1.57h lr 3.40e-04 S=10 S: 1-cos 0.2775 pair 0.944 | M: 1-cos 0.3044 pair 0.950  34.9 img/s q=0
+step 5697 1.59h lr 3.31e-04 S=20 S: 1-cos 0.2651 pair 0.940 | M: 1-cos 0.2939 pair 0.948  35.3 img/s q=0
+step 5764 1.60h lr 3.21e-04 S=20 S: 1-cos 0.2736 pair 0.942 | M: 1-cos 0.2988 pair 0.949  34.7 img/s q=0
+step 5825 1.62h lr 3.12e-04 S=16 S: 1-cos 0.2724 pair 0.930 | M: 1-cos 0.3043 pair 0.938  32.2 img/s q=0
+step 5885 1.64h lr 3.03e-04 S=12 S: 1-cos 0.2847 pair 0.951 | M: 1-cos 0.3130 pair 0.959  31.7 img/s q=0
+step 5946 1.65h lr 2.95e-04 S=12 S: 1-cos 0.2673 pair 0.918 | M: 1-cos 0.2981 pair 0.928  32.4 img/s q=0
+step 6005 1.67h lr 2.86e-04 S=20 S: 1-cos 0.2802 pair 0.931 | M: 1-cos 0.3071 pair 0.935  31.2 img/s q=0
+step 6060 1.69h lr 2.77e-04 S=20 S: 1-cos 0.2881 pair 0.936 | M: 1-cos 0.3204 pair 0.944  28.4 img/s q=0
+step 6119 1.70h lr 2.69e-04 S=12 S: 1-cos 0.2756 pair 0.929 | M: 1-cos 0.3059 pair 0.934  31.4 img/s q=0
+step 6177 1.72h lr 2.60e-04 S=16 S: 1-cos 0.2790 pair 0.915 | M: 1-cos 0.3078 pair 0.925  30.9 img/s q=0
+step 6232 1.74h lr 2.52e-04 S=20 S: 1-cos 0.2769 pair 0.955 | M: 1-cos 0.3056 pair 0.955  28.8 img/s q=0
+step 6290 1.75h lr 2.44e-04 S=6 S: 1-cos 0.2770 pair 0.956 | M: 1-cos 0.3053 pair 0.964  30.9 img/s q=0
+step 6351 1.77h lr 2.36e-04 S=20 S: 1-cos 0.2721 pair 0.938 | M: 1-cos 0.2963 pair 0.946  32.4 img/s q=0
+step 6407 1.79h lr 2.28e-04 S=16 S: 1-cos 0.2746 pair 0.937 | M: 1-cos 0.3041 pair 0.947  29.8 img/s q=0
+step 6465 1.80h lr 2.20e-04 S=6 S: 1-cos 0.2822 pair 0.938 | M: 1-cos 0.3037 pair 0.948  30.9 img/s q=0
+step 6528 1.82h lr 2.13e-04 S=16 S: 1-cos 0.2623 pair 0.924 | M: 1-cos 0.2895 pair 0.934  33.0 img/s q=0
+step 6582 1.84h lr 2.05e-04 S=16 S: 1-cos 0.2830 pair 0.952 | M: 1-cos 0.3067 pair 0.959  28.4 img/s q=0
+step 6641 1.85h lr 1.98e-04 S=14 S: 1-cos 0.2822 pair 0.935 | M: 1-cos 0.3091 pair 0.943  31.0 img/s q=0
+step 6698 1.87h lr 1.91e-04 S=16 S: 1-cos 0.2900 pair 0.944 | M: 1-cos 0.3152 pair 0.950  29.9 img/s q=0
+step 6760 1.89h lr 1.84e-04 S=20 S: 1-cos 0.2693 pair 0.957 | M: 1-cos 0.2921 pair 0.964  33.0 img/s q=0
+step 6822 1.91h lr 1.77e-04 S=14 S: 1-cos 0.2701 pair 0.928 | M: 1-cos 0.2925 pair 0.939  32.7 img/s q=0
+step 6885 1.92h lr 1.70e-04 S=16 S: 1-cos 0.2680 pair 0.928 | M: 1-cos 0.2907 pair 0.936  33.1 img/s q=0
+step 6949 1.94h lr 1.63e-04 S=14 S: 1-cos 0.2694 pair 0.946 | M: 1-cos 0.2916 pair 0.954  33.9 img/s q=0
+step 7009 1.96h lr 1.57e-04 S=14 S: 1-cos 0.2835 pair 0.948 | M: 1-cos 0.3028 pair 0.953  31.4 img/s q=0
+step 7066 1.97h lr 1.50e-04 S=20 S: 1-cos 0.2778 pair 0.949 | M: 1-cos 0.2986 pair 0.957  30.1 img/s q=0
+step 7118 1.99h lr 1.44e-04 S=20 S: 1-cos 0.2908 pair 0.959 | M: 1-cos 0.3133 pair 0.972  27.4 img/s q=0
+[eval step 7164] {"S": {"cos_grids": 0.7160425186157227, "cos_strokes": 0.7459884881973267, "pearson": 0.41934067010879517, "spearman": 0.4051089283816139, "pair_sign_agree": 0.5428571428571428, "pair_delta_corr": 0.07852470874786377, "pair_sign_agree_big": 0.5170305676855895}, "M": {"cos_grids": 0.6880630254745483, "cos_strokes": 0.7165296673774719, "pearson": 0.3055173456668854, "spearman": 0.3081469773892621, "pair_sign_agree": 0.5431547619047619, "pair_delta_corr": 0.11993371695280075, "pair_sign_agree_big": 0.5187772925764192}}
+step 7182 2.01h lr 1.38e-04 S=16 S: 1-cos 0.2723 pair 0.910 | M: 1-cos 0.2962 pair 0.920  33.5 img/s q=0
+step 7246 2.02h lr 1.33e-04 S=12 S: 1-cos 0.2661 pair 0.920 | M: 1-cos 0.2895 pair 0.925  33.9 img/s q=0
+step 7306 2.04h lr 1.27e-04 S=20 S: 1-cos 0.2781 pair 0.951 | M: 1-cos 0.2993 pair 0.959  30.9 img/s q=0
+step 7365 2.06h lr 1.21e-04 S=20 S: 1-cos 0.2852 pair 0.961 | M: 1-cos 0.3060 pair 0.969  30.2 img/s q=0
+step 7424 2.08h lr 1.16e-04 S=16 S: 1-cos 0.2746 pair 0.937 | M: 1-cos 0.2960 pair 0.948  30.7 img/s q=0
+step 7491 2.09h lr 1.11e-04 S=16 S: 1-cos 0.2758 pair 0.935 | M: 1-cos 0.2946 pair 0.946  35.5 img/s q=0
+step 7557 2.11h lr 1.06e-04 S=20 S: 1-cos 0.2763 pair 0.924 | M: 1-cos 0.2968 pair 0.940  34.4 img/s q=0
+step 7617 2.13h lr 1.02e-04 S=12 S: 1-cos 0.2672 pair 0.919 | M: 1-cos 0.2884 pair 0.926  31.8 img/s q=0
+step 7677 2.14h lr 9.70e-05 S=14 S: 1-cos 0.2796 pair 0.935 | M: 1-cos 0.3007 pair 0.945  31.4 img/s q=0
+step 7735 2.16h lr 9.28e-05 S=16 S: 1-cos 0.2841 pair 0.953 | M: 1-cos 0.3012 pair 0.955  30.8 img/s q=0
+step 7795 2.18h lr 8.86e-05 S=20 S: 1-cos 0.2785 pair 0.933 | M: 1-cos 0.2980 pair 0.939  30.8 img/s q=0
+step 7853 2.19h lr 8.48e-05 S=20 S: 1-cos 0.2678 pair 0.922 | M: 1-cos 0.2884 pair 0.931  30.7 img/s q=0
+step 7921 2.21h lr 8.11e-05 S=12 S: 1-cos 0.2653 pair 0.949 | M: 1-cos 0.2860 pair 0.955  36.1 img/s q=0
+step 7973 2.23h lr 7.76e-05 S=20 S: 1-cos 0.2785 pair 0.937 | M: 1-cos 0.2985 pair 0.943  27.3 img/s q=0
+step 8039 2.24h lr 7.43e-05 S=20 S: 1-cos 0.2680 pair 0.944 | M: 1-cos 0.2874 pair 0.953  34.2 img/s q=0
+step 8096 2.26h lr 7.12e-05 S=14 S: 1-cos 0.2825 pair 0.953 | M: 1-cos 0.3033 pair 0.965  30.1 img/s q=0
+step 8147 2.28h lr 6.83e-05 S=16 S: 1-cos 0.2879 pair 0.956 | M: 1-cos 0.3080 pair 0.955  26.5 img/s q=0
+step 8209 2.30h lr 6.56e-05 S=12 S: 1-cos 0.2797 pair 0.958 | M: 1-cos 0.2983 pair 0.963  32.8 img/s q=0
+step 8262 2.31h lr 6.32e-05 S=12 S: 1-cos 0.2873 pair 0.928 | M: 1-cos 0.3063 pair 0.938  28.0 img/s q=0
+step 8320 2.33h lr 6.09e-05 S=16 S: 1-cos 0.2775 pair 0.936 | M: 1-cos 0.2964 pair 0.941  30.8 img/s q=0
+step 8390 2.35h lr 5.88e-05 S=20 S: 1-cos 0.2598 pair 0.941 | M: 1-cos 0.2806 pair 0.948  35.9 img/s q=0
+step 8452 2.36h lr 5.70e-05 S=20 S: 1-cos 0.2742 pair 0.939 | M: 1-cos 0.2942 pair 0.945  32.6 img/s q=0
+step 8519 2.38h lr 5.54e-05 S=20 S: 1-cos 0.2613 pair 0.945 | M: 1-cos 0.2805 pair 0.957  35.6 img/s q=0
+step 8575 2.40h lr 5.40e-05 S=20 S: 1-cos 0.2775 pair 0.942 | M: 1-cos 0.2967 pair 0.950  28.7 img/s q=0
+step 8629 2.41h lr 5.28e-05 S=20 S: 1-cos 0.2743 pair 0.955 | M: 1-cos 0.2955 pair 0.960  28.1 img/s q=0
+step 8691 2.43h lr 5.18e-05 S=16 S: 1-cos 0.2731 pair 0.942 | M: 1-cos 0.2926 pair 0.948  33.1 img/s q=0
+step 8754 2.45h lr 5.10e-05 S=20 S: 1-cos 0.2726 pair 0.930 | M: 1-cos 0.2912 pair 0.935  33.0 img/s q=0
+step 8805 2.46h lr 5.05e-05 S=16 S: 1-cos 0.2752 pair 0.947 | M: 1-cos 0.2968 pair 0.957  26.6 img/s q=0
+step 8865 2.48h lr 5.01e-05 S=8 S: 1-cos 0.2744 pair 0.946 | M: 1-cos 0.2938 pair 0.955  31.9 img/s q=0
+step 8916 2.50h lr 5.00e-05 S=20 S: 1-cos 0.2735 pair 0.939 | M: 1-cos 0.2935 pair 0.947  26.7 img/s q=0
+[eval step 8920] {"S": {"cos_grids": 0.7186447978019714, "cos_strokes": 0.7468525767326355, "pearson": 0.4224470257759094, "spearman": 0.40792805766320284, "pair_sign_agree": 0.5550595238095238, "pair_delta_corr": 0.09661227464675903, "pair_sign_agree_big": 0.5366812227074236}, "M": {"cos_grids": 0.6979155540466309, "cos_strokes": 0.7224348783493042, "pearson": 0.3830642104148865, "spearman": 0.38073980947656677, "pair_sign_agree": 0.5342261904761905, "pair_delta_corr": 0.1343570351600647, "pair_sign_agree_big": 0.5131004366812227}}
+exported S: 5.20 MiB
+exported M: 7.28 MiB
+done

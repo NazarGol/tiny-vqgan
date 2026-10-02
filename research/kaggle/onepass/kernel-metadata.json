@@ -13,6 +13,8 @@
   "noi3noi3/vqpaint-tokens"
  ],
  "competition_sources": [],
- "kernel_sources": [],
+ "kernel_sources": [
+  "noi3noi3/vqpaint-tiny-scorer"
+ ],
  "model_sources": []
 }

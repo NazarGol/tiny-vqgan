@@ -101,6 +101,7 @@ write("onepass", "vqpaint-onepass", "vqpaint onepass", nb("VQPAINT one-pass star
     ONEPASS_DL,
     '''f"{sys.executable} -u {REPO}/web/research/tiny/gen_onepass_data.py --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json --captions {DATA}/annotations --out {OUT}/onepass_data.npz --n {S['N']} --hours {S['GEN_HOURS']} && {sys.executable} -u {REPO}/web/research/tiny/train_onepass.py --npz {OUT}/onepass_data.npz --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --out {OUT} --hours {S['TRAIN_HOURS']}"''',
     "onepass", "/kaggle/input/**/vqpaint-onepass*/onepass/nothing"))
+import json as _j
 m2 = _j.load(open(os.path.join(HERE, "tiny_scorer", "kernel-metadata.json"))); m2["kernel_sources"] = ["noi3noi3/vqpaint-tiny-scorer"]; _j.dump(m2, open(os.path.join(HERE, "tiny_scorer", "kernel-metadata.json"), "w"), indent=1)   # round 2 resumes from its own previous output
 # the onepass kernel also needs the scorer kernel's output
 import json as _j
