@@ -50,3 +50,4 @@ Also: decoder variant B (3.0 MB) matches PyTorch like A; `variant: 'auto'` loads
 
 ## Direction received 2026-10-02 (for after Phase 4 + app PR)
 The engine becomes a standalone public repo (`tiny-vqgan` if free) with history, notebooks, test page/matrix, DEVICES.md, an outsider README with numbers/usage/side-by-side/retraining/limitations, a licence review of all upstream sources (weights stay unpublished until Nazar confirms), the app vendoring a pinned copy, and a "numbers for the white paper" block in the final report. Phase 5 may follow later.
+- Local MPS backup run (variant A, 2 h, 33k samples): L1 0.054, LPIPS 0.35, PSNR 23.5, CLIP cosine 0.70; images have the right structure and colours but are soft and less saturated, VQGAN glitch texture smoothed. Expect the Kaggle run (~190k samples) to be sharper; a round 2 (resume + hinge-GAN) is one push away if the gate says "too soft".

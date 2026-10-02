@@ -67,9 +67,10 @@ import onnxruntime as ort; print("ORT providers:", ort.get_available_providers()
 '''
 write("tiny_decoder", "vqpaint-tiny-decoder", "vqpaint tiny decoder", nb("VQPAINT tiny decoder (distilled VQGAN f16 decoder)",
     "Small conv decoders from `vqgan_imagenet_f16_16384` tokens to RGB, distilled from the original decoder on on-the-fly token grids. Output: `/kaggle/working/tiny/`.",
-    '''S = dict(HOURS=3.5, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=2e-3, BRANCH="research/tiny-vqgan")''',
+    '''S = dict(HOURS=3.5, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=2e-3, GAN_W=0.0, GAN_START=0.4, BRANCH="research/tiny-vqgan")
+# round 2 (resume from a previous version's output attached as a kernel source): HOURS=1.5, LR=5e-4, GAN_W=0.05, GAN_START=0.0''',
     CLIP_DL,
-    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_decoder.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --lpips {S['LPIPS']} --lr {S['LR']} --clip {DATA}/vision_model.onnx"''',
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_decoder.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --lpips {S['LPIPS']} --lr {S['LR']} --gan-w {S['GAN_W']} --gan-start {S['GAN_START']} --clip {DATA}/vision_model.onnx"''',
     "tiny", "/kaggle/input/**/vqpaint-tiny-decoder*/tiny/ckpt.pt"))
 write("tiny_scorer", "vqpaint-tiny-scorer", "vqpaint tiny scorer", nb("VQPAINT token scorer (tokens → MobileCLIP image embedding)",
     "Distils teacher decoder + MobileCLIP-S0 vision into a small conv net on the token grid. Output: `/kaggle/working/scorer/`.",

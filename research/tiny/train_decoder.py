@@ -135,11 +135,11 @@ def evaluate(final=False):
 
 # ---- train
 t_start = time.time(); elapsed = lambda: elapsed0 + time.time() - t_start
-budget = args.hours * 3600; warm = 200
+budget = elapsed0 + args.hours * 3600; warm = 200 if step == 0 else 1   # resumed: --hours more, schedule restarts
 last_ck, last_ev, last_log = time.time(), time.time(), time.time(); seen = 0; acc = {n: dict(l1=0.0, lp=0.0, k=0) for n in variants}
 while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
     tok, tgt = q.get()
-    frac = min(1.0, elapsed() / budget); lr = args.lr * (0.5 * (1 + math.cos(math.pi * frac)) * 0.95 + 0.05) * min(1.0, (step + 1) / warm)
+    frac = min(1.0, (elapsed() - elapsed0) / (args.hours * 3600)); lr = args.lr * (0.5 * (1 + math.cos(math.pi * frac)) * 0.95 + 0.05) * min(1.0, (step + 1) / warm)
     stepped = False
     for n, v in variants.items():
         for g in v["opt"].param_groups: g["lr"] = lr
