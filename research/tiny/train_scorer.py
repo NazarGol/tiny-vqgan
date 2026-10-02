@@ -12,12 +12,13 @@ ap.add_argument("--data", required=True); ap.add_argument("--out", required=True
 ap.add_argument("--hours", type=float, default=2.5); ap.add_argument("--batch", type=int, default=32)
 ap.add_argument("--variants", default="S:64:64,96,128,192;M:64:96,128,192,256")
 ap.add_argument("--lr", type=float, default=1e-3); ap.add_argument("--pairs", type=float, default=0.4, help="fraction of each batch that are (grid, small mutation) pairs")
-ap.add_argument("--pair-w", type=float, default=1.0); ap.add_argument("--ema", type=float, default=0.999)
+ap.add_argument("--pair-w", type=float, default=10.0); ap.add_argument("--ema", type=float, default=0.999)
 ap.add_argument("--ckpt-every", type=float, default=900); ap.add_argument("--eval-every", type=float, default=1800)
 ap.add_argument("--clip-vision", required=True); ap.add_argument("--clip-text", default=""); ap.add_argument("--tokenizer", default="")
 ap.add_argument("--smoke", action="store_true"); ap.add_argument("--max-steps", type=int, default=0)
 ap.add_argument("--extra-npz", default="", help="one-pass data npz: its search results/contexts are mixed into the batches (hard negatives for a second round)")
 ap.add_argument("--extra-frac", type=float, default=0.3)
+ap.add_argument("--workers", type=int, default=3, help="token-grid producer processes")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
 sdev = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -60,12 +61,29 @@ def make_batch(B, S, pairs):
     while len(rows) < B: rows.append(extra_or_sample())
     return torch.from_numpy(np.stack(rows)), npairs
 
+import multiprocessing as mp
+def grid_worker(seed, out_q, B, pairs, smoke, data_dir, extra_npz, extra_frac):
+    np.random.seed(seed); rng = np.random.default_rng(seed)
+    global sampler, EXTRA, args
+    g16_, g32_ = C.load_grids(data_dir); sampler = C.GridSampler(g16_, g32_, seed=seed)
+    class A: pass
+    args = A(); args.extra_frac = extra_frac
+    EXTRA = {}
+    if extra_npz and os.path.exists(extra_npz):
+        D = np.load(extra_npz, allow_pickle=True)
+        for k in D.files:
+            if k.startswith("result_") or k.startswith("ctx_"): EXTRA.setdefault(int(k.split("_")[1]), []).append(D[k].astype(np.int64))
+        EXTRA = {S: np.concatenate(v) for S, v in EXTRA.items()}
+    while True:
+        S = 8 if smoke else C.GridSampler.pick_size(rng, SIZES)
+        tok, npairs = make_batch(B, S, pairs); out_q.put((tok.numpy(), npairs))
 q = queue.Queue(maxsize=4); stop = False
+ctx_mp = mp.get_context("fork"); grid_q = ctx_mp.Queue(maxsize=16)
+workers = [ctx_mp.Process(target=grid_worker, args=(1000 + i, grid_q, args.batch, args.pairs, args.smoke, args.data, args.extra_npz, args.extra_frac), daemon=True) for i in range(args.workers)]
+for w in workers: w.start()
 def producer():
-    rng = np.random.default_rng(777)
     while not stop:
-        S = 8 if args.smoke else C.GridSampler.pick_size(rng, SIZES)
-        tok, npairs = make_batch(args.batch, S, args.pairs)
+        tok_np, npairs = grid_q.get(); tok = torch.from_numpy(tok_np)
         img = teach(tok); emb = torch.from_numpy(clip_images(img))
         if not np.isfinite(emb.numpy()).all(): print("non-finite CLIP embedding, batch dropped", flush=True); continue
         q.put((tok.to(sdev), emb.to(sdev), npairs))
@@ -148,11 +166,11 @@ def evaluate():
     return summary
 
 t_start = time.time(); elapsed = lambda: elapsed0 + time.time() - t_start
-budget = args.hours * 3600; warm = 200; last_ck, last_ev, last_log = time.time(), time.time(), time.time(); seen = 0
+budget = elapsed0 + args.hours * 3600; warm = 200 if step == 0 else 1; last_ck, last_ev, last_log = time.time(), time.time(), time.time(); seen = 0
 acc = {n: dict(cos=0.0, pair=0.0, k=0) for n in variants}
 while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
     tok, emb, npairs = q.get()
-    frac = min(1.0, elapsed() / budget); lr = args.lr * (0.5 * (1 + math.cos(math.pi * frac)) * 0.95 + 0.05) * min(1.0, (step + 1) / warm)
+    frac = min(1.0, (elapsed() - elapsed0) / (args.hours * 3600)); lr = args.lr * (0.5 * (1 + math.cos(math.pi * frac)) * 0.95 + 0.05) * min(1.0, (step + 1) / warm)
     stepped = False
     for n, v in variants.items():
         for g in v["opt"].param_groups: g["lr"] = lr
