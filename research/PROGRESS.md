@@ -41,3 +41,8 @@ Goal: paint on the minimum phones (`web/DEVICES.md`) with no ML runtime in the l
 | Pixel 5 profile (Chromium) | 2 070 | 6–12 ms | 193 ms | 303 MB | ok |
 
 Also: decoder variant B (3.0 MB) matches PyTorch like A; `variant: 'auto'` loads A, probes a 256 px decode and switches to B above 60 ms; the app's no-WebGPU path (`?nogpu=1`) picks the light engine by itself and paints (7 400 tries in 4.5 s).
+
+## 2026-10-02 morning — first Kaggle runs were NaN (6 GPU hours lost)
+- Both kernels trained for their full budget with NaN losses from step 1: the VQGAN teacher overflows under fp16 autocast (its residual stream reaches ~1e5; the ONNX export already works around this with a 1/16 tail rescale). The MPS smoke test never ran fp16, so it did not catch it. Kaggle kernel logs are only readable after the run, so the NaN went unnoticed for 3.5 h.
+- Fix: `load_teacher` applies `rescale_tail(dec, 16)` (output identical in fp32; reproduced locally in half precision: raw → 50 % NaN, rescaled → finite, max diff 0.013 vs fp32), `teach_safe` falls back to fp32 for a non-finite batch, non-finite losses are skipped, non-finite CLIP embeddings dropped. Scorer notebook pins `onnxruntime-gpu==1.20.1` (the latest needs CUDA 13; Kaggle has 12), CPU fallback kept.
+- Relaunched decoder (3.5 h) and scorer (2.5 h); text and one-pass follow when slots free up. Quota left before relaunch: 15.6 h.

@@ -59,7 +59,7 @@ def write(dirname, slug, title, notebook):
                "dataset_sources": ["noi3noi3/vqpaint-assets", "noi3noi3/vqpaint-tokens"], "competition_sources": [], "kernel_sources": [], "model_sources": []}, open(os.path.join(d, "kernel-metadata.json"), "w"), indent=1)
 
 CLIP_DL = '''sh(f"{sys.executable} -m pip install -q lpips tokenizers scipy")
-sh(f"{sys.executable} -m pip install -q onnxruntime-gpu || {sys.executable} -m pip install -q onnxruntime")
+sh(f"{sys.executable} -m pip install -q onnxruntime-gpu==1.20.1 || {sys.executable} -m pip install -q onnxruntime")
 for f in ("onnx/vision_model.onnx", "onnx/text_model.onnx", "tokenizer.json"):
     dst = f"{DATA}/{os.path.basename(f)}"
     if not os.path.exists(dst): sh(f"curl -sSL https://huggingface.co/Xenova/mobileclip_s0/resolve/main/{f} -o {dst}")

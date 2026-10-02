@@ -32,10 +32,7 @@ g16, g32 = C.load_grids(args.data); print(f"grids: {len(g16)} x16, {0 if g32 is 
 sampler = C.GridSampler(g16, g32, seed=int(time.time()) % 100000)
 amp = tdev.type == "cuda"
 
-@torch.no_grad()
-def teach(tokens):
-    with torch.autocast(tdev.type, dtype=torch.float16, enabled=amp):
-        return teacher(tokens.to(tdev)).float().clamp(0, 1)
+def teach(tokens): return C.teach_safe(teacher, tokens, tdev, amp)
 
 q = queue.Queue(maxsize=6); stop = False
 def producer():
@@ -152,6 +149,7 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
             loss = l1 + args.lpips * lpv
             gan_on = disc is not None and frac > args.gan_start
             if gan_on: loss = loss - args.gan_w * disc(pred.float().clamp(0, 1) * 2 - 1).mean()
+        if not torch.isfinite(loss): print(f"step {step}: non-finite loss for {n}, batch skipped", flush=True); continue
         v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"])
         with torch.no_grad():
             d = args.ema if step > warm else 0.0

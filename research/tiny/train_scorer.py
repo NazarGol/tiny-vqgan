@@ -38,10 +38,7 @@ sampler = C.GridSampler(g16, g32, seed=int(time.time()) % 100000)
 amp = tdev.type == "cuda"
 SIZES = ((4, 0.05), (6, 0.10), (8, 0.15), (10, 0.15), (12, 0.20), (14, 0.10), (16, 0.15), (20, 0.10))
 
-@torch.no_grad()
-def teach(tokens):
-    with torch.autocast(tdev.type, dtype=torch.float16, enabled=amp):
-        return teacher(tokens.to(tdev)).float().clamp(0, 1)
+def teach(tokens): return C.teach_safe(teacher, tokens, tdev, amp)
 
 def make_batch(B, S, pairs):
     """Returns tokens [B,S,S] where the first 2*npairs rows are pairs (a, mutate(a, small))."""
@@ -58,6 +55,7 @@ def producer():
         S = 8 if args.smoke else C.GridSampler.pick_size(rng, SIZES)
         tok, npairs = make_batch(args.batch, S, args.pairs)
         img = teach(tok); emb = torch.from_numpy(clip_images(img))
+        if not np.isfinite(emb.numpy()).all(): print("non-finite CLIP embedding, batch dropped", flush=True); continue
         q.put((tok.to(sdev), emb.to(sdev), npairs))
 th = threading.Thread(target=producer, daemon=True); th.start()
 
@@ -154,6 +152,7 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
                 pair = ((dp - dr) ** 2).sum(1).mean() / (dr ** 2).sum(1).mean().clamp_min(1e-6)
             else: pair = torch.zeros((), device=sdev)
             loss = cos + args.pair_w * pair
+        if not torch.isfinite(loss): print(f"step {step}: non-finite loss for {n}, batch skipped", flush=True); continue
         v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"])
         with torch.no_grad():
             d = args.ema if step > warm else 0.0

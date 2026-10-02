@@ -17,9 +17,23 @@ def load_teacher(device):
     sys.path.insert(0, EXPORT); sys.path.insert(0, os.path.join(EXPORT, "taming-transformers"))
     import export_decoder as E
     cfg, sd = E.load_cfg_and_sd()
-    dec = E.build_decoder(cfg, sd).to(device).eval()
+    dec = E.build_decoder(cfg, sd)
+    E.rescale_tail(dec, 16.0)   # fold 1/16 into the last stage: the residual stream reaches ~1e5 and overflows fp16 otherwise (same trick as the ONNX export; output unchanged)
+    dec = dec.to(device).eval()
     for p in dec.parameters(): p.requires_grad_(False)
     return dec, dec.embedding.weight.detach().float().cpu()   # [16384, 256] codebook
+
+
+def teach_safe(teacher, tokens, device, amp):
+    """Teacher decode under fp16 autocast on CUDA; falls back to fp32 for a batch that is not finite."""
+    with torch.no_grad():
+        with torch.autocast(device.type, dtype=torch.float16, enabled=amp):
+            out = teacher(tokens.to(device)).float()
+        if not torch.isfinite(out).all():
+            print("teacher: non-finite fp16 output, recomputing in fp32", flush=True)
+            out = teacher(tokens.to(device)).float()
+            if not torch.isfinite(out).all(): raise RuntimeError("teacher output not finite even in fp32")
+    return out.clamp(0, 1)
 
 
 # ----------------------------------------------------------------------------- data
