@@ -140,6 +140,7 @@ last_ck, last_ev, last_log = time.time(), time.time(), time.time(); seen = 0; ac
 while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
     tok, tgt = q.get()
     frac = min(1.0, elapsed() / budget); lr = args.lr * (0.5 * (1 + math.cos(math.pi * frac)) * 0.95 + 0.05) * min(1.0, (step + 1) / warm)
+    stepped = False
     for n, v in variants.items():
         for g in v["opt"].param_groups: g["lr"] = lr
         with torch.autocast(sdev.type, dtype=torch.float16, enabled=sdev.type == "cuda"):
@@ -150,7 +151,7 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
             gan_on = disc is not None and frac > args.gan_start
             if gan_on: loss = loss - args.gan_w * disc(pred.float().clamp(0, 1) * 2 - 1).mean()
         if not torch.isfinite(loss): print(f"step {step}: non-finite loss for {n}, batch skipped", flush=True); continue
-        v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"])
+        v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"]); stepped = True
         with torch.no_grad():
             d = args.ema if step > warm else 0.0
             for pe, pm in zip(v["ema"].parameters(), v["model"].parameters()): pe.mul_(d).add_(pm.detach(), alpha=1 - d)
@@ -158,7 +159,8 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
         if gan_on:   # hinge loss for the discriminator on this variant's prediction
             d_real = disc(tgt * 2 - 1); d_fake = disc(pred.detach().float().clamp(0, 1) * 2 - 1)
             dloss = F.relu(1 - d_real).mean() + F.relu(1 + d_fake).mean(); dopt.zero_grad(set_to_none=True); dloss.backward(); dopt.step()
-    scaler.update(); step += 1; seen += tok.shape[0]
+    if stepped: scaler.update()
+    step += 1; seen += tok.shape[0]
     if step == 30 and not any(a_k for a_k in ([acc[n]["k"] for n in acc] if isinstance(acc[next(iter(acc))], dict) else [acc[n][1] for n in acc])): raise SystemExit("no finite loss in the first 30 steps: aborting instead of burning the budget")
     if time.time() - last_log > 60 or args.smoke:
         dt = time.time() - last_log; print(f"step {step} {elapsed()/3600:.2f}h lr {lr:.2e} S={tok.shape[1]} " + " | ".join(f"{n}: L1 {a['l1']/max(1,a['k']):.4f} LPIPS {a['lp']/max(1,a['k']):.4f}" for n, a in acc.items()) + f"  {seen/dt:.1f} img/s q={q.qsize()}", flush=True)

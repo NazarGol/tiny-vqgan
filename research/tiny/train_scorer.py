@@ -79,7 +79,6 @@ for spec in args.variants.split(";"):
     opt = torch.optim.AdamW(m.parameters(), lr=args.lr, weight_decay=0.01, betas=(0.9, 0.99))
     variants[name] = dict(model=m, ema=ema, opt=opt)
     print(f"variant {name}: c0 {c0} widths {widths} params {m.n_params()/1e6:.2f} M -> fp16 {m.n_params()*2/2**20:.1f} MiB", flush=True)
-scaler = torch.amp.GradScaler(enabled=sdev.type == "cuda")
 step, elapsed0 = 0, 0.0; ck = os.path.join(args.out, "ckpt.pt")
 if os.path.exists(ck):
     st = torch.load(ck, map_location=sdev); step, elapsed0 = st["step"], st["elapsed"]
@@ -124,7 +123,7 @@ def embed_real(grids):
 def embed_pred(model, grids):
     out = []
     for g in grids:
-        with torch.autocast(sdev.type, dtype=torch.float16, enabled=sdev.type == "cuda"): out.append(model(torch.from_numpy(g)[None].to(sdev)).float().cpu().numpy()[0])
+        out.append(model(torch.from_numpy(g)[None].to(sdev)).float().cpu().numpy()[0])
     return np.stack(out)
 REAL = {"grids": embed_real(EV_GRIDS), "a": embed_real([a for a, b in EV_PAIRS]), "b": embed_real([b for a, b in EV_PAIRS]), "strokes": embed_real(EV_STROKES) if EV_STROKES else None}
 
@@ -154,23 +153,23 @@ acc = {n: dict(cos=0.0, pair=0.0, k=0) for n in variants}
 while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
     tok, emb, npairs = q.get()
     frac = min(1.0, elapsed() / budget); lr = args.lr * (0.5 * (1 + math.cos(math.pi * frac)) * 0.95 + 0.05) * min(1.0, (step + 1) / warm)
+    stepped = False
     for n, v in variants.items():
         for g in v["opt"].param_groups: g["lr"] = lr
-        with torch.autocast(sdev.type, dtype=torch.float16, enabled=sdev.type == "cuda"):
-            pred = v["model"](tok).float()
-            cos = 1 - (pred * emb).sum(1).mean()
-            if npairs:
-                dp = pred[1:2 * npairs:2] - pred[0:2 * npairs:2]; dr = emb[1:2 * npairs:2] - emb[0:2 * npairs:2]
-                pair = ((dp - dr) ** 2).sum(1).mean() / (dr ** 2).sum(1).mean().clamp_min(1e-6)
-            else: pair = torch.zeros((), device=sdev)
-            loss = cos + args.pair_w * pair
+        pred = v["model"](tok).float()   # fp32: the scorer has no normalisation layers and overflowed under fp16 autocast
+        cos = 1 - (pred * emb).sum(1).mean()
+        if npairs:
+            dp = pred[1:2 * npairs:2] - pred[0:2 * npairs:2]; dr = emb[1:2 * npairs:2] - emb[0:2 * npairs:2]
+            pair = (((dp - dr) ** 2).sum(1) / ((dr ** 2).sum(1) + 1e-3)).mean()   # bounded when a pair barely differs
+        else: pair = torch.zeros((), device=sdev)
+        loss = cos + args.pair_w * pair
         if not torch.isfinite(loss): print(f"step {step}: non-finite loss for {n}, batch skipped", flush=True); continue
-        v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"])
+        v["opt"].zero_grad(set_to_none=True); loss.backward(); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); v["opt"].step(); stepped = True
         with torch.no_grad():
             d = args.ema if step > warm else 0.0
             for pe, pm in zip(v["ema"].parameters(), v["model"].parameters()): pe.mul_(d).add_(pm.detach(), alpha=1 - d)
         acc[n]["cos"] += cos.item(); acc[n]["pair"] += pair.item(); acc[n]["k"] += 1
-    scaler.update(); step += 1; seen += tok.shape[0]
+    step += 1; seen += tok.shape[0]
     if step == 30 and not any(a_k for a_k in ([acc[n]["k"] for n in acc] if isinstance(acc[next(iter(acc))], dict) else [acc[n][1] for n in acc])): raise SystemExit("no finite loss in the first 30 steps: aborting instead of burning the budget")
     if time.time() - last_log > 60 or args.smoke:
         dt = time.time() - last_log; print(f"step {step} {elapsed()/3600:.2f}h lr {lr:.2e} S={tok.shape[1]} " + " | ".join(f"{n}: 1-cos {a['cos']/max(1,a['k']):.4f} pair {a['pair']/max(1,a['k']):.3f}" for n, a in acc.items()) + f"  {seen/dt:.1f} img/s q={q.qsize()}", flush=True)
