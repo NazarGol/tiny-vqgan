@@ -65,12 +65,14 @@ for f in ("onnx/vision_model.onnx", "onnx/text_model.onnx", "tokenizer.json"):
     if not os.path.exists(dst): sh(f"curl -sSL https://huggingface.co/Xenova/mobileclip_s0/resolve/main/{f} -o {dst}")
 import onnxruntime as ort; print("ORT providers:", ort.get_available_providers())
 '''
+DEC_DL = CLIP_DL + '''sh(f"{sys.executable} {REPO}/web/research/tiny/export_clip_vision.py --onnx {DATA}/vision_model.onnx --out {DATA}/clipx")   # differentiable CLIP for the faithfulness loss
+'''
 write("tiny_decoder", "vqpaint-tiny-decoder", "vqpaint tiny decoder", nb("VQPAINT tiny decoder (distilled VQGAN f16 decoder)",
     "Small conv decoders from `vqgan_imagenet_f16_16384` tokens to RGB, distilled from the original decoder on on-the-fly token grids. Output: `/kaggle/working/tiny/`.",
-    '''S = dict(HOURS=3.5, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=2e-3, GAN_W=0.0, GAN_START=0.4, BRANCH="research/tiny-vqgan")
-# round 2 (resume from a previous version's output attached as a kernel source): HOURS=1.5, LR=5e-4, GAN_W=0.05, GAN_START=0.0''',
-    CLIP_DL,
-    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_decoder.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --lpips {S['LPIPS']} --lr {S['LR']} --gan-w {S['GAN_W']} --gan-start {S['GAN_START']} --clip {DATA}/vision_model.onnx"''',
+    '''S = dict(HOURS=2.0, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=5e-4, GAN_W=0.0, GAN_START=0.4, CLIP_W=0.5, BRANCH="research/tiny-vqgan")
+# round 2 = resume from the previous version's output (this kernel is its own kernel source) + CLIP-faithfulness loss; HOURS are added''',
+    DEC_DL,
+    '''f"{sys.executable} -u {REPO}/web/research/tiny/train_decoder.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --lpips {S['LPIPS']} --lr {S['LR']} --gan-w {S['GAN_W']} --gan-start {S['GAN_START']} --clip-w {S['CLIP_W']} --clip-ir {DATA}/clipx --clip {DATA}/vision_model.onnx"''',
     "tiny", "/kaggle/input/**/vqpaint-tiny-decoder*/tiny/ckpt.pt"))
 write("tiny_scorer", "vqpaint-tiny-scorer", "vqpaint tiny scorer", nb("VQPAINT token scorer (tokens → MobileCLIP image embedding)",
     "Distils teacher decoder + MobileCLIP-S0 vision into a small conv net on the token grid. Output: `/kaggle/working/scorer/`.",
@@ -102,6 +104,7 @@ write("onepass", "vqpaint-onepass", "vqpaint onepass", nb("VQPAINT one-pass star
     '''f"{sys.executable} -u {REPO}/web/research/tiny/gen_onepass_data.py --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --clip-text {DATA}/text_model.onnx --tokenizer {DATA}/tokenizer.json --captions {DATA}/annotations --out {OUT}/onepass_data.npz --n {S['N']} --hours {S['GEN_HOURS']} && {sys.executable} -u {REPO}/web/research/tiny/train_onepass.py --npz {OUT}/onepass_data.npz --scorer-ckpt {SCK} --variant {S['SCORER']} --data {DATA} --out {OUT} --hours {S['TRAIN_HOURS']}"''',
     "onepass", "/kaggle/input/**/vqpaint-onepass*/onepass/nothing"))
 import json as _j
+m3 = _j.load(open(os.path.join(HERE, "tiny_decoder", "kernel-metadata.json"))); m3["kernel_sources"] = ["noi3noi3/vqpaint-tiny-decoder"]; _j.dump(m3, open(os.path.join(HERE, "tiny_decoder", "kernel-metadata.json"), "w"), indent=1)
 m2 = _j.load(open(os.path.join(HERE, "tiny_scorer", "kernel-metadata.json"))); m2["kernel_sources"] = ["noi3noi3/vqpaint-tiny-scorer"]; _j.dump(m2, open(os.path.join(HERE, "tiny_scorer", "kernel-metadata.json"), "w"), indent=1)   # round 2 resumes from its own previous output
 # the onepass kernel also needs the scorer kernel's output
 import json as _j

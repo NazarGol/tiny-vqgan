@@ -18,6 +18,8 @@ ap.add_argument("--ckpt-every", type=float, default=900); ap.add_argument("--eva
 ap.add_argument("--smoke", action="store_true", help="a few tiny steps on the local machine"); ap.add_argument("--max-steps", type=int, default=0)
 ap.add_argument("--clip", default="", help="MobileCLIP vision ONNX for the CLIP-agreement metric (optional)")
 ap.add_argument("--gan-w", type=float, default=0.0, help="hinge-GAN weight on the student (0 = off); a small PatchGAN discriminator trained alongside")
+ap.add_argument("--clip-w", type=float, default=0.0, help="weight of 1 - cos(CLIP(pred), CLIP(target)) through the differentiable MobileCLIP IR (needs --clip-ir DIR)")
+ap.add_argument("--clip-ir", default="", help="directory with clip_vision.json/bin (export_clip_vision.py)")
 ap.add_argument("--gan-start", type=float, default=0.4, help="fraction of the time budget after which the adversarial term is switched on")
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
@@ -57,6 +59,20 @@ for spec in args.variants.split(";"):
     print(f"variant {name}: widths {widths} blocks {blocks} params {m.n_params()/1e6:.2f} M -> fp16 {m.n_params()*2/2**20:.1f} MiB", flush=True)
 import lpips
 lp = lpips.LPIPS(net="vgg", verbose=False).to(sdev).eval()
+clip_ir = None
+if args.clip_w > 0:
+    import ir_torch as IR
+    man, tget = IR.load(args.clip_ir); cache = {}
+    def tcache(name):
+        if name not in cache: cache[name] = tget(name)
+        return cache[name]
+    WKEYS = {"conv": ("w", "b"), "dwconv": ("w", "b"), "head": ("w",), "se": ("fc1w", "fc1b", "fc2w", "fc2b"), "scale_add": ("s",), "attn": ("qkvw", "qkvb", "projw", "projb")}
+    for op in man["ops"]:   # pre-build the weight arrays once (names under these keys are weights, not activations)
+        for k in WKEYS.get(op["op"], ()): tcache(op[k])
+    def clip_feat(img):   # [B,3,H,W] 0..1 -> unit embeddings, differentiable
+        x = F.interpolate(img, size=(256, 256), mode="bilinear", align_corners=False)
+        return F.normalize(IR.run_grad(man, tcache, x, sdev), dim=-1)
+    clip_ir = clip_feat; print("CLIP-faithfulness loss on, weight", args.clip_w, flush=True)
 disc = None
 if args.gan_w > 0:   # PatchGAN on 256 px: 3 -> 64 -> 128 -> 256 -> 1 (stride 2), LeakyReLU; shared across variants
     import torch.nn as nn
@@ -150,6 +166,9 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
             loss = l1 + args.lpips * lpv
             gan_on = disc is not None and frac > args.gan_start
             if gan_on: loss = loss - args.gan_w * disc(pred.float().clamp(0, 1) * 2 - 1).mean()
+            if clip_ir is not None:
+                with torch.no_grad(): ct = clip_ir(tgt)
+                loss = loss + args.clip_w * (1 - (clip_ir(pred.float().clamp(0, 1)) * ct).sum(1).mean())
         if not torch.isfinite(loss): print(f"step {step}: non-finite loss for {n}, batch skipped", flush=True); continue
         v["opt"].zero_grad(set_to_none=True); scaler.scale(loss).backward(); scaler.unscale_(v["opt"]); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); scaler.step(v["opt"]); stepped = True
         with torch.no_grad():

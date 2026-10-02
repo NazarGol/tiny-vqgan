@@ -60,6 +60,36 @@ def run(man, tensor, img):   # img [B,3,256,256] float
         else: raise ValueError(kind)
     return T[man["ops"][-1]["out"]]
 
+def run_grad(man, tget, img, dev):
+    """Differentiable forward (autograd through the input): tget(name) -> np array; weights are moved to dev and cached by the caller."""
+    T = {man["ops"][0]["in"]: F.pad(img, (0, 0, 0, 0, 0, 1))}
+    W = lambda name: torch.from_numpy(tget(name)).to(dev)
+    for op in man["ops"]:
+        kind = op["op"]
+        if kind == "conv":
+            w = dense_weight(tget(op["w"]), op["cout"], op["cin"], op["k"]).to(dev); b = W(op["b"]); x = T[op["in"]]
+            x = F.pad(x, (0, 0, 0, 0, 0, op["cin"] - x.shape[1])) if x.shape[1] < op["cin"] else x
+            T[op["out"]] = act(F.conv2d(x, w, b, stride=op["stride"], padding=op["pad"]), op["act"])
+        elif kind == "dwconv":
+            w = dw_weight(tget(op["w"]), op["cout"], op["k"]).to(dev); b = W(op["b"]); x = T[op["in"]][:, :op["cin"]]
+            y = act(F.conv2d(x, w[:op["cin"] * op["m"]], b[:op["cin"] * op["m"]], stride=op["stride"], padding=op["pad"], groups=op["cin"]), op["act"])
+            T[op["out"]] = F.pad(y, (0, 0, 0, 0, 0, op["cout"] - y.shape[1])) if y.shape[1] < op["cout"] else y
+        elif kind == "se":
+            x = T[op["in"]]; v = x.mean((2, 3), keepdim=True)
+            w1 = dense_weight(tget(op["fc1w"]), op["r"], op["c"], 1).to(dev); w2 = dense_weight(tget(op["fc2w"]), op["c"], op["r"], 1).to(dev)
+            h = F.relu(F.conv2d(v, w1, W(op["fc1b"]))); sg = torch.sigmoid(F.conv2d(h, w2, W(op["fc2b"]))); T[op["out"]] = act(x * sg, op["act"])
+        elif kind == "scale_add": T[op["out"]] = T[op["a"]] + W(op["s"])[None, :, None, None] * T[op["b"]]
+        elif kind == "gelu": T[op["out"]] = gelu(T[op["in"]])
+        elif kind == "attn":
+            x = T[op["in"]]; Bn, Cc, H, Wd = x.shape; qw = dense_weight(tget(op["qkvw"]), 3 * Cc, Cc, 1).to(dev)
+            qkv = F.conv2d(x, qw, W(op["qkvb"])).reshape(Bn, 3, op["heads"], Cc // op["heads"], H * Wd); q, k, v = qkv[:, 0], qkv[:, 1], qkv[:, 2]
+            att = torch.softmax((q.transpose(-1, -2) @ k) * op["scale"], -1); o = (att @ v.transpose(-1, -2)).transpose(-1, -2).reshape(Bn, Cc, H, Wd)
+            pw = dense_weight(tget(op["projw"]), Cc, Cc, 1).to(dev); T[op["out"]] = F.conv2d(o, pw, W(op["projb"]))
+        elif kind == "gmean": T[op["out"]] = T[op["in"]].mean((2, 3), keepdim=True)
+        elif kind == "head": T[op["out"]] = F.conv2d(T[op["in"]], dense_weight(tget(op["w"]), op["cout"], op["cin"], 1).to(dev)).flatten(1)
+    return T[man["ops"][-1]["out"]]
+
+
 if __name__ == "__main__":
     import onnxruntime as ort
     d = sys.argv[1]; int8 = "--int8" in sys.argv
