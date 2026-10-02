@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><title>clip vision test</title><body style="background:#404040;color:#eee;font:14px monospace"><pre id="log"></pre>
+<script type="module">
+import { ClipVisionGL } from '../lib/clipvision.js';
+const q = new URLSearchParams(location.search), base = q.get('base') || './tiny/test/', file = q.get('file') || 'clip_vision', reps = +(q.get('reps') || 10);
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const res = { ok: false, cases: [] };
+try {
+  const t0 = performance.now();
+  const cv = await ClipVisionGL.load(base + file + '.json', base + file + '.bin'); res.loadMs = performance.now() - t0; res.weightMB = cv.weightBytes / 2 ** 20; res.renderer = cv.nn.renderer;
+  log(`loaded ${res.weightMB.toFixed(1)} MB in ${res.loadMs.toFixed(0)} ms (${cv.layers.length} ops) on ${res.renderer}`);
+  const ref = await (await fetch(base + 'ref_clip.json')).json(); const gl = cv.gl; let minCos = 1;
+  for (const c of ref.cases) {
+    const img = new Image(); img.src = base + c.png; await img.decode();
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    cv.setInput(tex, c.w, c.h); const e = cv.embed();
+    const exp = new Float32Array(Uint8Array.from(atob(c.emb), (ch) => ch.charCodeAt(0)).buffer); let d = 0, n = 0; for (let i = 0; i < 512; i++) { d += e[i] * exp[i]; n += e[i] * e[i]; }
+    minCos = Math.min(minCos, d); res.cases.push({ png: c.png, cos: d, norm: Math.sqrt(n), ms: cv.stats.lastMs }); log(`${c.png} ${c.w}x${c.h}: cos ${d.toFixed(5)} (|e| ${Math.sqrt(n).toFixed(3)}) ${cv.stats.lastMs.toFixed(1)} ms`);
+    gl.deleteTexture(tex);
+  }
+  if (q.get('debug')) {   // compare per-op statistics with the torch executor on clip_img_0
+    const dbg = await (await fetch(base + 'ref_clip_debug.json')).json(); const c0 = ref.cases[0]; const img = new Image(); img.src = base + c0.png; await img.decode();
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    cv.setInput(tex, c0.w, c0.h); res.debug = [];
+    for (const ck of dbg) {
+      const a = cv.debugTensor(ck.i); let m = 0, mx = 0; for (let i = 0; i < a.length; i++) { m += a[i]; mx = Math.max(mx, Math.abs(a[i])); } m /= a.length;
+      const samples = ck.sample_idx.map((i) => a[i]); const maxDiff = Math.max(...samples.map((v, j) => Math.abs(v - ck.samples[j])));
+      const line = { i: ck.i, op: ck.op, shape: ck.shape, n: a.length, mean: m, refMean: ck.mean, absmax: mx, refAbsmax: ck.absmax, maxSampleDiff: maxDiff };
+      res.debug.push(line); log(`op ${ck.i} ${ck.op} ${JSON.stringify(ck.shape)} n=${a.length}: mean ${m.toFixed(4)} vs ${ck.mean.toFixed(4)}, absmax ${mx.toFixed(2)} vs ${ck.absmax.toFixed(2)}, max sample diff ${maxDiff.toFixed(4)}`);
+      if (maxDiff > 0.05 * Math.max(1, ck.absmax) || a.length !== ck.shape.reduce((p, v) => p * v, 1)) { log('FIRST DIVERGENCE at op ' + ck.i); res.firstBad = ck.i; break; }
+    }
+  }
+  // timing: embed and score on the last image
+  const t1 = performance.now(); for (let i = 0; i < reps; i++) cv.embed(); res.embedMs = (performance.now() - t1) / reps;
+  cv.setTargets([new Float32Array(512).fill(0.0442)]); const t2 = performance.now(); for (let i = 0; i < reps; i++) cv.score(); res.scoreMs = (performance.now() - t2) / reps;
+  log(`embed ${res.embedMs.toFixed(1)} ms, score ${res.scoreMs.toFixed(1)} ms; pool ${(cv.nn.poolBytes / 2 ** 20).toFixed(1)} MB, textures ${(cv.nn.texBytes / 2 ** 20).toFixed(1)} MB`);
+  res.minCos = minCos; res.texMB = cv.nn.texBytes / 2 ** 20; res.ok = minCos > 0.995;
+} catch (e) { res.error = e.message + '\n' + (e.stack || ''); log('ERROR ' + e.message); console.error(e); }
+window.__result = res;
+</script></body>

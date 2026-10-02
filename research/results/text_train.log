@@ -1,0 +1,103 @@
+device cuda:0
+[0;93m2026-10-02 12:37:09.765244706 [W:onnxruntime:, transformer_memcpy.cc:74 ApplyImpl] 3 Memcpy nodes are added to the graph torch_jit for CUDAExecutionProvider. It might have negative impact on performance (including unable to run CUDA graph). Set session_options.log_severity_level=1 to see the detail logs before this message.[m
+teacher providers ['CUDAExecutionProvider', 'CPUExecutionProvider']
+{'coco': 591753, 'val': 25014, 'prompts': 30000, 'metaphors': 238, 'notes': 1903}
+variant S: emb 32 width 192 layers 4 heads 4: 3.48 M params -> fp16 6.6 MiB
+variant M: emb 32 width 256 layers 4 heads 4: 4.90 M params -> fp16 9.3 MiB
+step 126 0.02h lr 4.20e-04 S: 1-cos 0.4154 | M: 1-cos 0.3926  534 texts/s q=8
+step 247 0.03h lr 8.22e-04 S: 1-cos 0.2498 | M: 1-cos 0.2532  516 texts/s q=8
+step 369 0.05h lr 9.97e-04 S: 1-cos 0.1965 | M: 1-cos 0.1967  520 texts/s q=8
+step 491 0.07h lr 9.95e-04 S: 1-cos 0.1583 | M: 1-cos 0.1551  519 texts/s q=8
+step 613 0.08h lr 9.93e-04 S: 1-cos 0.1369 | M: 1-cos 0.1318  520 texts/s q=8
+step 735 0.10h lr 9.90e-04 S: 1-cos 0.1219 | M: 1-cos 0.1156  518 texts/s q=8
+step 857 0.12h lr 9.86e-04 S: 1-cos 0.1126 | M: 1-cos 0.1061  517 texts/s q=8
+step 980 0.13h lr 9.81e-04 S: 1-cos 0.1040 | M: 1-cos 0.0974  521 texts/s q=8
+step 1102 0.15h lr 9.77e-04 S: 1-cos 0.1000 | M: 1-cos 0.0934  520 texts/s q=8
+step 1224 0.17h lr 9.71e-04 S: 1-cos 0.0955 | M: 1-cos 0.0887  518 texts/s q=8
+step 1346 0.18h lr 9.65e-04 S: 1-cos 0.0928 | M: 1-cos 0.0857  519 texts/s q=8
+step 1468 0.20h lr 9.59e-04 S: 1-cos 0.0890 | M: 1-cos 0.0819  520 texts/s q=8
+step 1590 0.22h lr 9.52e-04 S: 1-cos 0.0876 | M: 1-cos 0.0804  518 texts/s q=8
+step 1712 0.23h lr 9.44e-04 S: 1-cos 0.0861 | M: 1-cos 0.0789  520 texts/s q=8
+step 1834 0.25h lr 9.36e-04 S: 1-cos 0.0848 | M: 1-cos 0.0776  519 texts/s q=8
+step 1957 0.27h lr 9.27e-04 S: 1-cos 0.0824 | M: 1-cos 0.0749  522 texts/s q=8
+step 2079 0.28h lr 9.18e-04 S: 1-cos 0.0811 | M: 1-cos 0.0736  520 texts/s q=8
+step 2202 0.30h lr 9.09e-04 S: 1-cos 0.0815 | M: 1-cos 0.0738  521 texts/s q=8
+step 2325 0.32h lr 8.99e-04 S: 1-cos 0.0792 | M: 1-cos 0.0714  521 texts/s q=8
+[eval step 2439] {"S": {"cos_val": 0.9193152785301208, "top10_overlap": 0.57975, "cos_prompts40": 0.9048436880111694, "cos__unused": 0.9048436880111694, "cos_metaphors": 0.9235487580299377, "cos_notes": 0.9524532556533813}, "M": {"cos_val": 0.9257304072380066, "top10_overlap": 0.5797, "cos_prompts40": 0.9124521017074585, "cos__unused": 0.9124521017074585, "cos_metaphors": 0.9467688798904419, "cos_notes": 0.9666992425918579}}
+step 2445 0.33h lr 8.88e-04 S: 1-cos 0.0793 | M: 1-cos 0.0715  509 texts/s q=8
+step 2568 0.35h lr 8.77e-04 S: 1-cos 0.0777 | M: 1-cos 0.0698  521 texts/s q=8
+step 2691 0.37h lr 8.66e-04 S: 1-cos 0.0776 | M: 1-cos 0.0694  521 texts/s q=8
+step 2814 0.38h lr 8.54e-04 S: 1-cos 0.0775 | M: 1-cos 0.0693  521 texts/s q=8
+step 2937 0.40h lr 8.42e-04 S: 1-cos 0.0764 | M: 1-cos 0.0681  522 texts/s q=8
+step 3059 0.42h lr 8.29e-04 S: 1-cos 0.0758 | M: 1-cos 0.0674  520 texts/s q=8
+step 3182 0.44h lr 8.16e-04 S: 1-cos 0.0752 | M: 1-cos 0.0668  522 texts/s q=8
+step 3304 0.45h lr 8.03e-04 S: 1-cos 0.0752 | M: 1-cos 0.0668  518 texts/s q=8
+step 3426 0.47h lr 7.89e-04 S: 1-cos 0.0752 | M: 1-cos 0.0666  519 texts/s q=8
+step 3549 0.49h lr 7.75e-04 S: 1-cos 0.0738 | M: 1-cos 0.0653  521 texts/s q=8
+step 3671 0.50h lr 7.61e-04 S: 1-cos 0.0722 | M: 1-cos 0.0636  517 texts/s q=8
+step 3794 0.52h lr 7.46e-04 S: 1-cos 0.0727 | M: 1-cos 0.0639  521 texts/s q=8
+step 3916 0.54h lr 7.31e-04 S: 1-cos 0.0729 | M: 1-cos 0.0641  516 texts/s q=8
+step 4038 0.55h lr 7.16e-04 S: 1-cos 0.0723 | M: 1-cos 0.0636  517 texts/s q=8
+step 4159 0.57h lr 7.01e-04 S: 1-cos 0.0707 | M: 1-cos 0.0618  516 texts/s q=8
+step 4280 0.59h lr 6.85e-04 S: 1-cos 0.0720 | M: 1-cos 0.0632  515 texts/s q=8
+step 4402 0.60h lr 6.69e-04 S: 1-cos 0.0722 | M: 1-cos 0.0632  519 texts/s q=8
+step 4524 0.62h lr 6.53e-04 S: 1-cos 0.0711 | M: 1-cos 0.0622  518 texts/s q=8
+step 4645 0.64h lr 6.37e-04 S: 1-cos 0.0712 | M: 1-cos 0.0621  516 texts/s q=8
+step 4767 0.65h lr 6.21e-04 S: 1-cos 0.0708 | M: 1-cos 0.0616  521 texts/s q=8
+[eval step 4871] {"S": {"cos_val": 0.939497709274292, "top10_overlap": 0.6700499999999999, "cos_prompts40": 0.9227714538574219, "cos__unused": 0.9227714538574219, "cos_metaphors": 0.9488381743431091, "cos_notes": 0.9704059958457947}, "M": {"cos_val": 0.9476190209388733, "top10_overlap": 0.6866, "cos_prompts40": 0.9326004981994629, "cos__unused": 0.9326004981994629, "cos_metaphors": 0.9713295102119446, "cos_notes": 0.982999324798584}}
+step 4885 0.67h lr 6.05e-04 S: 1-cos 0.0699 | M: 1-cos 0.0607  503 texts/s q=8
+step 5007 0.69h lr 5.88e-04 S: 1-cos 0.0693 | M: 1-cos 0.0600  517 texts/s q=8
+step 5129 0.70h lr 5.72e-04 S: 1-cos 0.0701 | M: 1-cos 0.0608  519 texts/s q=8
+step 5251 0.72h lr 5.55e-04 S: 1-cos 0.0682 | M: 1-cos 0.0588  518 texts/s q=8
+step 5373 0.74h lr 5.39e-04 S: 1-cos 0.0690 | M: 1-cos 0.0598  519 texts/s q=8
+step 5495 0.75h lr 5.22e-04 S: 1-cos 0.0691 | M: 1-cos 0.0597  520 texts/s q=8
+step 5618 0.77h lr 5.05e-04 S: 1-cos 0.0684 | M: 1-cos 0.0589  522 texts/s q=8
+step 5740 0.79h lr 4.89e-04 S: 1-cos 0.0684 | M: 1-cos 0.0589  518 texts/s q=8
+step 5862 0.80h lr 4.72e-04 S: 1-cos 0.0689 | M: 1-cos 0.0594  519 texts/s q=8
+step 5984 0.82h lr 4.56e-04 S: 1-cos 0.0672 | M: 1-cos 0.0576  519 texts/s q=8
+step 6106 0.84h lr 4.39e-04 S: 1-cos 0.0677 | M: 1-cos 0.0581  517 texts/s q=8
+step 6228 0.85h lr 4.23e-04 S: 1-cos 0.0682 | M: 1-cos 0.0586  517 texts/s q=8
+step 6351 0.87h lr 4.07e-04 S: 1-cos 0.0676 | M: 1-cos 0.0580  522 texts/s q=8
+step 6472 0.89h lr 3.91e-04 S: 1-cos 0.0672 | M: 1-cos 0.0573  514 texts/s q=8
+step 6595 0.90h lr 3.75e-04 S: 1-cos 0.0668 | M: 1-cos 0.0571  522 texts/s q=8
+step 6717 0.92h lr 3.59e-04 S: 1-cos 0.0662 | M: 1-cos 0.0564  519 texts/s q=8
+step 6839 0.94h lr 3.43e-04 S: 1-cos 0.0666 | M: 1-cos 0.0567  519 texts/s q=8
+step 6961 0.95h lr 3.28e-04 S: 1-cos 0.0663 | M: 1-cos 0.0564  520 texts/s q=8
+step 7082 0.97h lr 3.13e-04 S: 1-cos 0.0665 | M: 1-cos 0.0566  514 texts/s q=8
+step 7204 0.99h lr 2.99e-04 S: 1-cos 0.0662 | M: 1-cos 0.0563  520 texts/s q=8
+[eval step 7302] {"S": {"cos_val": 0.9437359571456909, "top10_overlap": 0.70175, "cos_prompts40": 0.9264410734176636, "cos__unused": 0.9264410734176636, "cos_metaphors": 0.9512460827827454, "cos_notes": 0.9716219305992126}, "M": {"cos_val": 0.9526905417442322, "top10_overlap": 0.7191500000000001, "cos_prompts40": 0.9377542734146118, "cos__unused": 0.9377542734146118, "cos_metaphors": 0.9731437563896179, "cos_notes": 0.9840859174728394}}
+step 7322 1.00h lr 2.84e-04 S: 1-cos 0.0657 | M: 1-cos 0.0558  503 texts/s q=8
+step 7444 1.02h lr 2.70e-04 S: 1-cos 0.0647 | M: 1-cos 0.0547  518 texts/s q=8
+step 7566 1.04h lr 2.56e-04 S: 1-cos 0.0653 | M: 1-cos 0.0553  520 texts/s q=8
+step 7688 1.05h lr 2.43e-04 S: 1-cos 0.0655 | M: 1-cos 0.0555  520 texts/s q=8
+step 7810 1.07h lr 2.29e-04 S: 1-cos 0.0640 | M: 1-cos 0.0540  519 texts/s q=8
+step 7932 1.09h lr 2.16e-04 S: 1-cos 0.0652 | M: 1-cos 0.0551  518 texts/s q=8
+step 8055 1.10h lr 2.04e-04 S: 1-cos 0.0654 | M: 1-cos 0.0553  521 texts/s q=8
+step 8178 1.12h lr 1.92e-04 S: 1-cos 0.0651 | M: 1-cos 0.0549  522 texts/s q=8
+step 8301 1.14h lr 1.80e-04 S: 1-cos 0.0648 | M: 1-cos 0.0546  521 texts/s q=8
+step 8423 1.15h lr 1.69e-04 S: 1-cos 0.0648 | M: 1-cos 0.0546  519 texts/s q=8
+step 8545 1.17h lr 1.58e-04 S: 1-cos 0.0648 | M: 1-cos 0.0545  519 texts/s q=8
+step 8668 1.19h lr 1.48e-04 S: 1-cos 0.0642 | M: 1-cos 0.0540  521 texts/s q=8
+step 8790 1.20h lr 1.38e-04 S: 1-cos 0.0648 | M: 1-cos 0.0546  519 texts/s q=8
+step 8913 1.22h lr 1.28e-04 S: 1-cos 0.0636 | M: 1-cos 0.0534  521 texts/s q=8
+step 9036 1.24h lr 1.20e-04 S: 1-cos 0.0634 | M: 1-cos 0.0533  521 texts/s q=8
+step 9157 1.26h lr 1.11e-04 S: 1-cos 0.0644 | M: 1-cos 0.0541  515 texts/s q=8
+step 9279 1.27h lr 1.03e-04 S: 1-cos 0.0640 | M: 1-cos 0.0537  520 texts/s q=8
+step 9401 1.29h lr 9.59e-05 S: 1-cos 0.0633 | M: 1-cos 0.0530  520 texts/s q=8
+step 9524 1.31h lr 8.90e-05 S: 1-cos 0.0631 | M: 1-cos 0.0529  521 texts/s q=8
+step 9646 1.32h lr 8.26e-05 S: 1-cos 0.0635 | M: 1-cos 0.0532  519 texts/s q=8
+[eval step 9738] {"S": {"cos_val": 0.9455177783966064, "top10_overlap": 0.71705, "cos_prompts40": 0.9286811947822571, "cos__unused": 0.9286811947822571, "cos_metaphors": 0.9519317746162415, "cos_notes": 0.9719159007072449}, "M": {"cos_val": 0.9548853039741516, "top10_overlap": 0.7365, "cos_prompts40": 0.9407085180282593, "cos__unused": 0.9407085180282593, "cos_metaphors": 0.9735530614852905, "cos_notes": 0.9843710660934448}}
+step 9765 1.34h lr 7.69e-05 S: 1-cos 0.0633 | M: 1-cos 0.0529  507 texts/s q=8
+step 9887 1.36h lr 7.16e-05 S: 1-cos 0.0640 | M: 1-cos 0.0538  520 texts/s q=8
+step 10009 1.37h lr 6.69e-05 S: 1-cos 0.0635 | M: 1-cos 0.0532  518 texts/s q=8
+step 10131 1.39h lr 6.28e-05 S: 1-cos 0.0628 | M: 1-cos 0.0524  519 texts/s q=8
+step 10253 1.41h lr 5.93e-05 S: 1-cos 0.0632 | M: 1-cos 0.0529  518 texts/s q=8
+step 10375 1.42h lr 5.63e-05 S: 1-cos 0.0629 | M: 1-cos 0.0524  517 texts/s q=8
+step 10497 1.44h lr 5.39e-05 S: 1-cos 0.0632 | M: 1-cos 0.0528  518 texts/s q=8
+step 10619 1.46h lr 5.20e-05 S: 1-cos 0.0633 | M: 1-cos 0.0529  517 texts/s q=8
+step 10741 1.47h lr 5.08e-05 S: 1-cos 0.0630 | M: 1-cos 0.0525  518 texts/s q=8
+step 10863 1.49h lr 5.01e-05 S: 1-cos 0.0630 | M: 1-cos 0.0525  518 texts/s q=8
+[eval step 10940] {"S": {"cos_val": 0.9459527134895325, "top10_overlap": 0.71975, "cos_prompts40": 0.9290460348129272, "cos__unused": 0.9290460348129272, "cos_metaphors": 0.9520673751831055, "cos_notes": 0.9719631671905518}, "M": {"cos_val": 0.9554126858711243, "top10_overlap": 0.74225, "cos_prompts40": 0.9412326812744141, "cos__unused": 0.9412326812744141, "cos_metaphors": 0.9736315011978149, "cos_notes": 0.9844182133674622}}
+exported S: 6.64 MiB
+exported M: 9.35 MiB
+done
