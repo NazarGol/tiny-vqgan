@@ -1,0 +1,380 @@
+{
+ "ok": true,
+ "rows": [
+  {
+   "prompt": "a face",
+   "crop": "11x11",
+   "A": {
+    "real": 0.23784313122533707,
+    "tries": 58,
+    "sec": 8.113900000095368
+   },
+   "modes": {
+    "clip": {
+     "real": 0.24065049152364115,
+     "own": 0.2863360345363617,
+     "tries": 414,
+     "clipEvals": 414,
+     "tokenEvals": 0,
+     "sec": 8.069199999928474
+    },
+    "prefilter": {
+     "real": 0.27451372063185087,
+     "own": 0.29178422689437866,
+     "tries": 392,
+     "clipEvals": 392,
+     "tokenEvals": 3112,
+     "sec": 8.060799999952316
+    },
+    "token": {
+     "real": 0.23714769248861362,
+     "own": 0.27201440930366516,
+     "tries": 13256,
+     "clipEvals": 0,
+     "tokenEvals": 13256,
+     "sec": 8.021700000047684
+    }
+   }
+  },
+  {
+   "prompt": "a red forest",
+   "crop": "14x12",
+   "A": {
+    "real": 0.19847898132965794,
+    "tries": 47,
+    "sec": 8.039
+   },
+   "modes": {
+    "clip": {
+     "real": 0.15927926660651215,
+     "own": 0.2155797779560089,
+     "tries": 430,
+     "clipEvals": 430,
+     "tokenEvals": 0,
+     "sec": 8.067299999952317
+    },
+    "prefilter": {
+     "real": 0.15393143660607636,
+     "own": 0.20263609290122986,
+     "tries": 348,
+     "clipEvals": 348,
+     "tokenEvals": 2760,
+     "sec": 8.111399999976157
+    },
+    "token": {
+     "real": 0.1426220104264699,
+     "own": 0.13070036470890045,
+     "tries": 14408,
+     "clipEvals": 0,
+     "tokenEvals": 14408,
+     "sec": 8.021899999976158
+    }
+   }
+  },
+  {
+   "prompt": "the sea at night",
+   "crop": "15x17",
+   "A": {
+    "real": 0.20147583706351185,
+    "tries": 33,
+    "sec": 8.1395
+   },
+   "modes": {
+    "clip": {
+     "real": 0.16674958433762044,
+     "own": 0.25337257981300354,
+     "tries": 370,
+     "clipEvals": 370,
+     "tokenEvals": 0,
+     "sec": 8.075100000023841
+    },
+    "prefilter": {
+     "real": 0.2533286264777845,
+     "own": 0.27121853828430176,
+     "tries": 276,
+     "clipEvals": 276,
+     "tokenEvals": 2184,
+     "sec": 8.267100000023841
+    },
+    "token": {
+     "real": 0.14662074490165342,
+     "own": 0.2127888798713684,
+     "tries": 13160,
+     "clipEvals": 0,
+     "tokenEvals": 13160,
+     "sec": 8.029200000047684
+    }
+   }
+  },
+  {
+   "prompt": "a city street",
+   "crop": "12x11",
+   "A": {
+    "real": 0.2008243426185076,
+    "tries": 27,
+    "sec": 8.056899999976158
+   },
+   "modes": {
+    "clip": {
+     "real": 0.16145158577902843,
+     "own": 0.27965858578681946,
+     "tries": 370,
+     "clipEvals": 370,
+     "tokenEvals": 0,
+     "sec": 8.034400000095367
+    },
+    "prefilter": {
+     "real": 0.17683313113929505,
+     "own": 0.2655884027481079,
+     "tries": 396,
+     "clipEvals": 396,
+     "tokenEvals": 3144,
+     "sec": 8.009600000023841
+    },
+    "token": {
+     "real": 0.12690465440304174,
+     "own": 0.19054555892944336,
+     "tries": 14344,
+     "clipEvals": 0,
+     "tokenEvals": 14344,
+     "sec": 8.024
+    }
+   }
+  },
+  {
+   "prompt": "green hills under a blue sky",
+   "crop": "13x13",
+   "A": {
+    "real": 0.11766551515803655,
+    "tries": 45,
+    "sec": 8.134700000047683
+   },
+   "modes": {
+    "clip": {
+     "real": 0.13464433300906875,
+     "own": 0.167735755443573,
+     "tries": 422,
+     "clipEvals": 422,
+     "tokenEvals": 0,
+     "sec": 8.073200000047684
+    },
+    "prefilter": {
+     "real": 0.10902073229830425,
+     "own": 0.14486433565616608,
+     "tries": 352,
+     "clipEvals": 352,
+     "tokenEvals": 2792,
+     "sec": 8.117299999952316
+    },
+    "token": {
+     "real": 0.07091898154078632,
+     "own": 0.13089583814144135,
+     "tries": 13704,
+     "clipEvals": 0,
+     "tokenEvals": 13704,
+     "sec": 8.037700000047684
+    }
+   }
+  },
+  {
+   "prompt": "a cat",
+   "crop": "16x15",
+   "A": {
+    "real": 0.11279357677712297,
+    "tries": 19,
+    "sec": 8.127
+   },
+   "modes": {
+    "clip": {
+     "real": 0.15383038168161425,
+     "own": 0.24236761033535004,
+     "tries": 154,
+     "clipEvals": 154,
+     "tokenEvals": 0,
+     "sec": 8.106600000023843
+    },
+    "prefilter": {
+     "real": 0.22063997766808155,
+     "own": 0.25400862097740173,
+     "tries": 164,
+     "clipEvals": 164,
+     "tokenEvals": 1288,
+     "sec": 8.224899999976158
+    },
+    "token": {
+     "real": 0.15726315741323418,
+     "own": 0.21819338202476501,
+     "tries": 13960,
+     "clipEvals": 0,
+     "tokenEvals": 13960,
+     "sec": 8.016
+    }
+   }
+  },
+  {
+   "prompt": "a lighthouse in a storm",
+   "crop": "11x12",
+   "A": {
+    "real": 0.15983522225204871,
+    "tries": 31,
+    "sec": 8.125100000023842
+   },
+   "modes": {
+    "clip": {
+     "real": 0.12577494963640912,
+     "own": 0.22028864920139313,
+     "tries": 266,
+     "clipEvals": 266,
+     "tokenEvals": 0,
+     "sec": 8.076400000095367
+    },
+    "prefilter": {
+     "real": 0.15257076193361185,
+     "own": 0.20571817457675934,
+     "tries": 380,
+     "clipEvals": 380,
+     "tokenEvals": 3016,
+     "sec": 8.015700000047683
+    },
+    "token": {
+     "real": 0.11406018411713587,
+     "own": 0.18140827119350433,
+     "tries": 17480,
+     "clipEvals": 0,
+     "tokenEvals": 17480,
+     "sec": 8.019299999952317
+    }
+   }
+  },
+  {
+   "prompt": "a bowl of oranges",
+   "crop": "14x14",
+   "A": {
+    "real": 0.17649468946001068,
+    "tries": 29,
+    "sec": 8.159600000023842
+   },
+   "modes": {
+    "clip": {
+     "real": 0.21997188176604732,
+     "own": 0.27295902371406555,
+     "tries": 398,
+     "clipEvals": 398,
+     "tokenEvals": 0,
+     "sec": 8.009900000095367
+    },
+    "prefilter": {
+     "real": 0.17095921228126768,
+     "own": 0.21837610006332397,
+     "tries": 252,
+     "clipEvals": 252,
+     "tokenEvals": 1992,
+     "sec": 8.072
+    },
+    "token": {
+     "real": 0.09545459332678452,
+     "own": 0.13642053306102753,
+     "tries": 12200,
+     "clipEvals": 0,
+     "tokenEvals": 12200,
+     "sec": 8.025599999904632
+    }
+   }
+  },
+  {
+   "prompt": "snow on a mountain",
+   "crop": "16x15",
+   "A": {
+    "real": 0.10462142402064958,
+    "tries": 26,
+    "sec": 8.0045
+   },
+   "modes": {
+    "clip": {
+     "real": 0.10370005497085727,
+     "own": 0.20038776099681854,
+     "tries": 390,
+     "clipEvals": 390,
+     "tokenEvals": 0,
+     "sec": 8.0815
+    },
+    "prefilter": {
+     "real": 0.10782269884730328,
+     "own": 0.1948760598897934,
+     "tries": 360,
+     "clipEvals": 360,
+     "tokenEvals": 2856,
+     "sec": 8.098300000071525
+    },
+    "token": {
+     "real": 0.0868537065649567,
+     "own": 0.18123739957809448,
+     "tries": 13960,
+     "clipEvals": 0,
+     "tokenEvals": 13960,
+     "sec": 8.033600000023842
+    }
+   }
+  },
+  {
+   "prompt": "a crowded market",
+   "crop": "10x12",
+   "A": {
+    "real": 0.22813552490976344,
+    "tries": 61,
+    "sec": 8.110300000071526
+   },
+   "modes": {
+    "clip": {
+     "real": 0.12241829830011793,
+     "own": 0.23659971356391907,
+     "tries": 426,
+     "clipEvals": 426,
+     "tokenEvals": 0,
+     "sec": 8.022
+    },
+    "prefilter": {
+     "real": 0.17316321882596725,
+     "own": 0.203078493475914,
+     "tries": 308,
+     "clipEvals": 308,
+     "tokenEvals": 2440,
+     "sec": 8.163
+    },
+    "token": {
+     "real": 0.1060058321757223,
+     "own": 0.19852741062641144,
+     "tries": 12264,
+     "clipEvals": 0,
+     "tokenEvals": 12264,
+     "sec": 8.026800000071525
+    }
+   }
+  }
+ ],
+ "summary": {
+  "meanRealA": 0.17381682448146465,
+  "meanSecA": 8.101050000023843,
+  "clip": {
+   "meanReal": 0.15884708276109166,
+   "wins": 4,
+   "meanSec": 8.061560000026226,
+   "meanTries": 364,
+   "ownMinusReal": 0.07868146637363961
+  },
+  "prefilter": {
+   "meanReal": 0.17927835167095424,
+   "wins": 4,
+   "meanSec": 8.114010000002384,
+   "meanTries": 322.8,
+   "ownMinusReal": 0.04593655287578341
+  },
+  "token": {
+   "meanReal": 0.12838515573583983,
+   "wins": 1,
+   "meanSec": 8.025580000007153,
+   "meanTries": 13873.6,
+   "ownMinusReal": 0.05688804900802229
+  }
+ }
+}
