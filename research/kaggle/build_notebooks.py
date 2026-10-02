@@ -37,7 +37,7 @@ def nb(title, intro, config, extra_setup, train_cmd, out_name, resume_glob):
     code(config + f'\nOUT = "/kaggle/working/{out_name}"\nprint(S)')
     code(SETUP + extra_setup)
     code(f'''os.makedirs(OUT, exist_ok=True)
-prev = sorted(glob.glob("{resume_glob}"))
+prev = sorted(glob.glob("{resume_glob}", recursive=True))
 if prev and not os.path.exists(f"{{OUT}}/ckpt.pt"): shutil.copy(prev[-1], f"{{OUT}}/ckpt.pt"); print("resuming from", prev[-1])''')
     code(f'''cmd = {train_cmd}
 print("$", cmd, flush=True)
@@ -69,7 +69,7 @@ DEC_DL = CLIP_DL + '''sh(f"{sys.executable} {REPO}/research/tiny/export_clip_vis
 '''
 write("tiny_decoder", "vqpaint-tiny-decoder", "vqpaint tiny decoder", nb("VQPAINT tiny decoder (distilled VQGAN f16 decoder)",
     "Small conv decoders from `vqgan_imagenet_f16_16384` tokens to RGB, distilled from the original decoder on on-the-fly token grids. Output: `/kaggle/working/tiny/`.",
-    '''S = dict(HOURS=2.0, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=5e-4, GAN_W=0.0, GAN_START=0.4, CLIP_W=0.5, BRANCH="main")
+    '''S = dict(HOURS=1.2, BATCH=16, VARIANTS="A:64,64,64,32,16:2,2,2,1,1;B:64,64,48,24,12:2,2,2,1,1", LPIPS=1.0, LR=3e-4, GAN_W=0.0, GAN_START=0.4, CLIP_W=0.3, BRANCH="main")
 # round 2 = resume from the previous version's output (this kernel is its own kernel source) + CLIP-faithfulness loss; HOURS are added''',
     DEC_DL,
     '''f"{sys.executable} -u {REPO}/research/tiny/train_decoder.py --data {DATA} --out {OUT} --hours {S['HOURS']} --batch {S['BATCH']} --variants '{S['VARIANTS']}' --lpips {S['LPIPS']} --lr {S['LR']} --gan-w {S['GAN_W']} --gan-start {S['GAN_START']} --clip-w {S['CLIP_W']} --clip-ir {DATA}/clipx --clip {DATA}/vision_model.onnx"''',
