@@ -36,6 +36,6 @@ Code MIT. Tiny decoder weights: derived from the CompVis VQGAN ImageNet checkpoi
 
 ## What is still open
 - Real-phone numbers (USB scripts: `research/phone_usb.md`; checklist: `web/DEVICES.md`). The engine on the old iPhone decides whether the memory target holds.
-- Decoder round 2 with a CLIP-faithfulness loss (training now on Kaggle; closes the 0.05–0.08 gap between CLIP on the tiny render and on the original render).
+- Decoder round 2 with a CLIP-faithfulness loss: two runs (from scratch 2 h; resumed +1.2 h) reached CLIP cosine 0.80 vs v3's 0.79 but were softer (LPIPS 0.30–0.31 vs 0.28), so v3 stays; a run resumed from v3 itself (checkpoint uploaded as a dataset) is the next try when GPU quota returns.
 - Scorer round 2 (pair-focused loss, hard negatives later), one-pass starting model (phase 5, not started: the token scorer must be trustworthy first).
 - Photos on the light engine still use the ORT VQGAN encoder (delegated to the ORT worker; heavy on the minimum phones).
