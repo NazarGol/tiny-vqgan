@@ -124,3 +124,4 @@ for n, v in variants.items():
     C.export_text(copy.deepcopy(v["ema"]).cpu(), os.path.join(args.out, f"tiny_text_{n}.bin"), os.path.join(args.out, f"tiny_text_{n}.json"), meta={"variant": n, "step": step, "metrics": summary[n]})
     print(f"exported {n}: {os.path.getsize(os.path.join(args.out, f'tiny_text_{n}.bin'))/2**20:.2f} MiB", flush=True)
 print("done", flush=True)
+import sys as _sys; _sys.stdout.flush(); os._exit(0)   # daemon producer threads/processes holding CUDA can hang the interpreter at shutdown and keep the Kaggle session alive

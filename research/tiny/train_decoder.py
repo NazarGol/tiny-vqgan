@@ -196,3 +196,4 @@ for n, v in variants.items():
     man = C.export_tinydec(copy.deepcopy(v["ema"]).cpu(), os.path.join(args.out, f"tiny_decoder_{n}.bin"), os.path.join(args.out, f"tiny_decoder_{n}.json"), meta={"variant": n, "step": step, "metrics": summary[n], "max_abs_activation": max(acts)})
     print(f"exported {n}: {os.path.getsize(os.path.join(args.out, f'tiny_decoder_{n}.bin'))/2**20:.2f} MiB, {len(man['layers'])} conv layers", flush=True)
 print("done", flush=True)
+import sys as _sys; _sys.stdout.flush(); os._exit(0)   # daemon producer threads/processes holding CUDA can hang the interpreter at shutdown and keep the Kaggle session alive
