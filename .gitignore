@@ -1,0 +1,11 @@
+models/
+research/out/
+research/data/*.npy
+research/data/*.u16
+research/data/*.log
+research/tiny/test/*.bin
+node_modules/
+__pycache__/
+.venv*/
+export/checkpoints/
+export/taming-transformers/
