@@ -12,7 +12,8 @@ import { fetchCached } from '../lib/models.js';
  *  WebKit holds several copies of a body fetched into JS (a 22 MB file cost +77 MB plain, +134 MB with put(clone) + read). */
 export async function fetchLowMem(url, { onProgress = null, cacheName = 'vqpaint-models-v1', mirror = null } = {}) {
   let cache = null; try { cache = await caches.open(cacheName); } catch (_) { cache = null; }
-  const tryUrls = mirror ? [url, mirror(url)].filter(Boolean) : [url];
+  let tryUrls = mirror ? [url, mirror(url)].filter(Boolean) : [url];
+  if (tryUrls.length > 1 && /\/tiny\//.test(url)) tryUrls = [tryUrls[1], tryUrls[0]];   // the light engine's files live on GitHub Pages only: skip the Hugging Face round trip
   if (cache) {
     for (const u of tryUrls) { const hit = await cache.match(u); if (hit) { const buf = await hit.arrayBuffer(); onProgress?.({ url, loaded: buf.byteLength, total: buf.byteLength, cached: true }); return buf; } }
     for (const u of tryUrls) {
@@ -30,11 +31,11 @@ export class Engine {
    * base: URL of the model files (tiny/, palette/, bank/). variant: decoder variant letter; scorer: scorer variant letter.
    * fetchBuf(url) may be the app's cached fetch; onProgress({url, loaded, total}) per file.
    */
-  static async load({ base, variant = 'A', scorer = 'S', text = 'S', clip = 'clip_vision', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null } = {}) {
-    const fb = fetchBuf || ((u) => fetchLowMem(u, { onProgress }));
+  static async load({ base, variant = 'A', scorer = 'S', text = 'S', clip = 'clip_vision', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null, mirrorOf = null } = {}) {
+    const fb = fetchBuf || ((u) => fetchLowMem(u, { onProgress, mirror: mirrorOf }));
     // the text model files are fetched now (so they are cached and counted) but only parsed inside a worker, per note
-    const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json' } : null;
-    if (textUrls) await Promise.all([fb(textUrls.tokenizerUrl), fb(textUrls.jsonUrl), fb(textUrls.binUrl)]);   // cached; the worker parses them
+    const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json', mirror: mirrorOf } : null;
+    if (textUrls) { for (const u of [textUrls.tokenizerUrl, textUrls.jsonUrl, textUrls.binUrl]) await fb(u); }   // cached now; the worker reads them from Cache Storage (with the same mirror)
     const nn = new GLNN();
     // variant 'auto': start with A; if a 256 px decode takes more than ~60 ms on this GPU, switch to the lighter B
     const want = variant === 'auto' ? 'A' : variant;
@@ -70,7 +71,8 @@ export class Engine {
     if (!this.worker) {
       const w = new Worker(new URL('./text_worker.js', import.meta.url), { type: 'module' });
       const call = (msg) => new Promise((resolve, reject) => { const id = Math.random(); const h = (ev) => { if (ev.data.id !== id) return; w.removeEventListener('message', h); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data); }; w.addEventListener('message', h); w.onerror = (e) => reject(new Error(e.message)); w.postMessage({ id, ...msg }); });
-      this.worker = { w, call, ready: call({ init: { tokenizerUrl: abs(this.textUrls.tokenizerUrl), jsonUrl: abs(this.textUrls.jsonUrl), binUrl: abs(this.textUrls.binUrl) } }) };
+      const m = this.textUrls.mirror, alt = (u) => (m ? m(u) : null);
+      this.worker = { w, call, ready: call({ init: { tokenizerUrl: abs(this.textUrls.tokenizerUrl), jsonUrl: abs(this.textUrls.jsonUrl), binUrl: abs(this.textUrls.binUrl), alt: { tokenizerUrl: alt(this.textUrls.tokenizerUrl), jsonUrl: alt(this.textUrls.jsonUrl), binUrl: alt(this.textUrls.binUrl) } } }) };
     }
     try { await this.worker.ready; } catch (e) { this.releaseText(); throw e; }
     const r = await this.worker.call({ texts }); this.stats.lastTextMs = r.ms; return r.embeddings;
