@@ -106,12 +106,14 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
     for n, v in variants.items():
         for g in v["opt"].param_groups: g["lr"] = lr
         pred = v["model"](ids); loss = 1 - (pred * emb).sum(1).mean()
+        if not torch.isfinite(loss): print(f"step {step}: non-finite loss for {n}, batch skipped", flush=True); continue
         v["opt"].zero_grad(set_to_none=True); loss.backward(); torch.nn.utils.clip_grad_norm_(v["model"].parameters(), 1.0); v["opt"].step()
         with torch.no_grad():
             d = args.ema if step > warm else 0.0
             for pe, pm in zip(v["ema"].parameters(), v["model"].parameters()): pe.mul_(d).add_(pm.detach(), alpha=1 - d)
         acc[n][0] += loss.item(); acc[n][1] += 1
     step += 1; seen += ids.shape[0]
+    if step == 30 and not any(a_k for a_k in ([acc[n]["k"] for n in acc] if isinstance(acc[next(iter(acc))], dict) else [acc[n][1] for n in acc])): raise SystemExit("no finite loss in the first 30 steps: aborting instead of burning the budget")
     if time.time() - last_log > 60 or args.smoke:
         dt = time.time() - last_log; print(f"step {step} {elapsed()/3600:.2f}h lr {lr:.2e} " + " | ".join(f"{n}: 1-cos {a[0]/max(1,a[1]):.4f}" for n, a in acc.items()) + f"  {seen/dt:.0f} texts/s q={q.qsize()}", flush=True)
         last_log = time.time(); seen = 0; acc = {n: [0.0, 0] for n in variants}

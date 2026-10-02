@@ -16,6 +16,8 @@ ap.add_argument("--pair-w", type=float, default=1.0); ap.add_argument("--ema", t
 ap.add_argument("--ckpt-every", type=float, default=900); ap.add_argument("--eval-every", type=float, default=1800)
 ap.add_argument("--clip-vision", required=True); ap.add_argument("--clip-text", default=""); ap.add_argument("--tokenizer", default="")
 ap.add_argument("--smoke", action="store_true"); ap.add_argument("--max-steps", type=int, default=0)
+ap.add_argument("--extra-npz", default="", help="one-pass data npz: its search results/contexts are mixed into the batches (hard negatives for a second round)")
+ap.add_argument("--extra-frac", type=float, default=0.3)
 args = ap.parse_args()
 os.makedirs(args.out, exist_ok=True)
 sdev = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -40,12 +42,22 @@ SIZES = ((4, 0.05), (6, 0.10), (8, 0.15), (10, 0.15), (12, 0.20), (14, 0.10), (1
 
 def teach(tokens): return C.teach_safe(teacher, tokens, tdev, amp)
 
+EXTRA = {}
+if args.extra_npz and os.path.exists(args.extra_npz):
+    D = np.load(args.extra_npz, allow_pickle=True)
+    for k in D.files:
+        if k.startswith("result_") or k.startswith("ctx_"): EXTRA.setdefault(int(k.split("_")[1]), []).append(D[k].astype(np.int64))
+    EXTRA = {S: np.concatenate(v) for S, v in EXTRA.items()}; print("extra grids:", {S: len(v) for S, v in EXTRA.items()}, flush=True)
 def make_batch(B, S, pairs):
     """Returns tokens [B,S,S] where the first 2*npairs rows are pairs (a, mutate(a, small))."""
     npairs = int(B * pairs) // 2; rows = []
+    ex = EXTRA.get(S)
+    def extra_or_sample():
+        if ex is not None and np.random.random() < args.extra_frac: return ex[np.random.randint(len(ex))].copy()
+        return sampler.sample(S)
     for _ in range(npairs):
-        a = sampler.sample(S); rows += [a, sampler.mutate(a, frac=float(np.random.uniform(0.01, 0.12)))]
-    while len(rows) < B: rows.append(sampler.sample(S))
+        a = extra_or_sample(); rows += [a, sampler.mutate(a, frac=float(np.random.uniform(0.01, 0.12)))]
+    while len(rows) < B: rows.append(extra_or_sample())
     return torch.from_numpy(np.stack(rows)), npairs
 
 q = queue.Queue(maxsize=4); stop = False
@@ -159,6 +171,7 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
             for pe, pm in zip(v["ema"].parameters(), v["model"].parameters()): pe.mul_(d).add_(pm.detach(), alpha=1 - d)
         acc[n]["cos"] += cos.item(); acc[n]["pair"] += pair.item(); acc[n]["k"] += 1
     scaler.update(); step += 1; seen += tok.shape[0]
+    if step == 30 and not any(a_k for a_k in ([acc[n]["k"] for n in acc] if isinstance(acc[next(iter(acc))], dict) else [acc[n][1] for n in acc])): raise SystemExit("no finite loss in the first 30 steps: aborting instead of burning the budget")
     if time.time() - last_log > 60 or args.smoke:
         dt = time.time() - last_log; print(f"step {step} {elapsed()/3600:.2f}h lr {lr:.2e} S={tok.shape[1]} " + " | ".join(f"{n}: 1-cos {a['cos']/max(1,a['k']):.4f} pair {a['pair']/max(1,a['k']):.3f}" for n, a in acc.items()) + f"  {seen/dt:.1f} img/s q={q.qsize()}", flush=True)
         last_log = time.time(); seen = 0; acc = {n: dict(cos=0.0, pair=0.0, k=0) for n in variants}

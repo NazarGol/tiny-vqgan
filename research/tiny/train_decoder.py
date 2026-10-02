@@ -159,6 +159,7 @@ while elapsed() < budget and not (args.max_steps and step >= args.max_steps):
             d_real = disc(tgt * 2 - 1); d_fake = disc(pred.detach().float().clamp(0, 1) * 2 - 1)
             dloss = F.relu(1 - d_real).mean() + F.relu(1 + d_fake).mean(); dopt.zero_grad(set_to_none=True); dloss.backward(); dopt.step()
     scaler.update(); step += 1; seen += tok.shape[0]
+    if step == 30 and not any(a_k for a_k in ([acc[n]["k"] for n in acc] if isinstance(acc[next(iter(acc))], dict) else [acc[n][1] for n in acc])): raise SystemExit("no finite loss in the first 30 steps: aborting instead of burning the budget")
     if time.time() - last_log > 60 or args.smoke:
         dt = time.time() - last_log; print(f"step {step} {elapsed()/3600:.2f}h lr {lr:.2e} S={tok.shape[1]} " + " | ".join(f"{n}: L1 {a['l1']/max(1,a['k']):.4f} LPIPS {a['lp']/max(1,a['k']):.4f}" for n, a in acc.items()) + f"  {seen/dt:.1f} img/s q={q.qsize()}", flush=True)
         last_log = time.time(); seen = 0; acc = {n: dict(l1=0.0, lp=0.0, k=0) for n in variants}
