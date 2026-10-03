@@ -47,6 +47,37 @@ export async function fetchLowMem(url, { onProgress = null, cacheName = 'vqpaint
   throw new Error(`could not load ${url.split('/').slice(-2).join('/')}: ${lastErr && lastErr.message}`);
 }
 
+/** Fresh copy of tiny/manifest.json ({ file: hash }): Pages first like the other tiny files, 8 s per URL, never throws. A copy
+ *  is kept in Cache Storage so a flaky network does not fall back to unversioned URLs (which would re-download everything). */
+async function loadManifest(url, mirror, rlog) {
+  const alt = mirror ? mirror(url) : null, urls = alt ? [alt, url] : [url], key = url + '?last=1';
+  let cache = null; if (!globalThis.__noCache) { try { cache = await caches.open('vqpaint-models-v1'); } catch (_) {} }
+  for (const u of urls) {
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 8000);
+    try {
+      const r = await fetch(u, { cache: 'no-cache', signal: ac.signal }); clearTimeout(timer);
+      if (r.ok) { const txt = await r.text(), m = JSON.parse(txt); if (cache) { try { await cache.put(key, new Response(txt, { headers: { 'Content-Type': 'application/json' } })); } catch (_) {} } rlog({ step: 'manifest', url: u, files: Object.keys(m).length }); return m; }
+      rlog({ step: 'manifest', url: u, status: r.status });
+    } catch (e) { clearTimeout(timer); rlog({ step: 'manifest', url: u, error: String(e && e.message) }); }
+  }
+  if (cache) { try { const hit = await cache.match(key); if (hit) { const m = await hit.json(); rlog({ step: 'manifest', url: 'cache', files: Object.keys(m).length }); return m; } } catch (_) {} }
+  return {};
+}
+
+/** Delete cached tiny files whose ?v= hash differs from the manifest (or that have none); files the manifest does not list stay. */
+async function evictStale(man, rlog) {
+  if (!Object.keys(man).length || globalThis.__noCache) return;
+  try {
+    const cache = await caches.open('vqpaint-models-v1'); let n = 0;
+    for (const req of await cache.keys()) {
+      const u = req.url, i = u.indexOf('/tiny/'); if (i < 0) continue;
+      const [name, q] = u.slice(i + 6).split('?'), h = man[name]; if (!h || q === 'v=' + h) continue;
+      if (await cache.delete(req)) n++;
+    }
+    if (n) rlog({ step: 'evict', removed: n });
+  } catch (_) {}
+}
+
 export class Engine {
   /**
    * base: URL of the model files (tiny/, palette/, bank/). variant: decoder variant letter; scorer: scorer variant letter.
@@ -55,30 +86,35 @@ export class Engine {
   static async load({ base, variant = 'A', scorer = 'S', text = 'S', clip = 'clip_vision', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null, mirrorOf = null } = {}) {
     const fb = fetchBuf || ((u) => fetchLowMem(u, { onProgress, mirror: mirrorOf }));
     const rlog = (e) => { try { globalThis.__rlog?.({ t: 'engine', ...e }); } catch (_) {} };
+    // content hashes: tiny/manifest.json (small, fetched fresh) → every tiny file is requested as name?v=<hash>, so a new model
+    // reaches every device by itself (the Cache Storage key changes) and stale copies are evicted after a successful load
+    const man = await loadManifest(base + 'tiny/manifest.json', mirrorOf, rlog);
+    const T = (name) => { const u = base + 'tiny/' + name, h = man[name]; return h ? `${u}?v=${h}` : u; };
     // the text model files are fetched now (so they are cached and counted) but only parsed inside a worker, per note
-    const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json', mirror: mirrorOf } : null;
+    const textUrls = text ? { jsonUrl: T(`tiny_text_${text}.json`), binUrl: T(`tiny_text_${text}.bin`), tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json', mirror: mirrorOf } : null;
     if (textUrls) { for (const u of [textUrls.tokenizerUrl, textUrls.jsonUrl, textUrls.binUrl]) await fb(u); }   // cached now; the worker reads them from Cache Storage (with the same mirror)
     let nn; try { nn = new GLNN(); } catch (e) { rlog({ step: 'webgl2', error: String(e && e.message) }); throw new Error('WebGL2 is not available: ' + (e && e.message)); }
     rlog({ step: 'webgl2', renderer: nn.renderer, maxTex: nn.maxTex, maxUbo: nn.maxUbo, halfRT: nn.halfRT, extF: nn.extF, worker: typeof document === 'undefined' });
     // variant 'auto': start with A; if a 256 px decode takes more than ~60 ms on this GPU, switch to the lighter B
     const want = variant === 'auto' ? 'A' : variant;
     // one model at a time: each download buffer is released before the next one is held
-    let dec = await TinyDecoderGL.load(base + `tiny/tiny_decoder_${want}.json`, base + `tiny/tiny_decoder_${want}.bin`, { fetchBuf: fb, nn });
-    rlog({ step: 'decoder', variant: want, ms: Math.round(performance.now()) });
-    const sc = scorer ? await TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }) : null;
-    rlog({ step: 'scorer', variant: scorer || null });
-    const cv = clip ? await ClipVisionGL.load(base + `tiny/${clip}.json`, base + `tiny/${clip}.bin`, { fetchBuf: fb, nn }) : null;   // the real MobileCLIP-S0 image tower (21.7 MB fp16)
-    rlog({ step: 'clip', file: clip || null, programs: nn.programs.size });
+    let dec = await TinyDecoderGL.load(T(`tiny_decoder_${want}.json`), T(`tiny_decoder_${want}.bin`), { fetchBuf: fb, nn });
+    dec.hash = man[`tiny_decoder_${want}.bin`] || null; rlog({ step: 'decoder', variant: want, hash: dec.hash, ms: Math.round(performance.now()) });
+    const sc = scorer ? await TinyScorerGL.load(T(`tiny_scorer_${scorer}.json`), T(`tiny_scorer_${scorer}.bin`), { fetchBuf: fb, nn }) : null;
+    rlog({ step: 'scorer', variant: scorer || null, hash: scorer ? man[`tiny_scorer_${scorer}.bin`] || null : null });
+    const cv = clip ? await ClipVisionGL.load(T(`${clip}.json`), T(`${clip}.bin`), { fetchBuf: fb, nn }) : null;   // the real MobileCLIP-S0 image tower (21.7 MB fp16)
+    rlog({ step: 'clip', file: clip || null, hash: clip ? man[`${clip}.bin`] || null : null, programs: nn.programs.size });
     const palette = await Palette.load(base + 'palette/');
     const bk = bank ? await Bank.load(base + bank + '/').catch((e) => { console.warn('bank', e); return null; }) : null;
     rlog({ step: 'data', bank: !!bk });
     if (variant === 'auto') {
       const probe = new Int32Array(256).fill(6328), ms = []; for (let i = 0; i < 4; i++) { dec.decodeRGBA(probe, 16, 16); ms.push(dec.stats.lastMs); }
       const med = ms.sort((a, b) => a - b)[2];
-      if (med > 60) { try { const b = await TinyDecoderGL.load(base + 'tiny/tiny_decoder_B.json', base + 'tiny/tiny_decoder_B.bin', { fetchBuf: fb, nn }); dec.release(); dec = b; dec.variant = 'B'; } catch (e) { console.warn('variant B unavailable', e); } }
+      if (med > 60) { try { const b = await TinyDecoderGL.load(T('tiny_decoder_B.json'), T('tiny_decoder_B.bin'), { fetchBuf: fb, nn }); dec.release(); dec = b; dec.variant = 'B'; dec.hash = man['tiny_decoder_B.bin'] || null; } catch (e) { console.warn('variant B unavailable', e); } }
       dec.probeMs = med; dec.variant ||= 'A';
     }
     dec.m = { emb: dec.m.emb, widths: dec.m.widths }; if (cv) cv.m = { input: cv.m.input, ops: cv.m.ops.length };   // manifests are not needed after load
+    evictStale(man, rlog);   // background: drop cached tiny files whose hash is no longer current
     return new Engine({ nn, decoder: dec, scorer: sc, clip: cv, palette, bank: bk, textEncoder, base, textUrls });
   }
 

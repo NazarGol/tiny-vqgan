@@ -17,4 +17,5 @@ if [[ $what == text || $what == all ]] && [ -f "$HERE/out/text/text/ckpt.pt" ]; 
   for v in S M; do "$PY" "$HERE/tiny/dump_ref_text.py" "$HERE/out/text/text/ckpt.pt" $v "$T" | tail -1; cp "$T/tiny_text_$v".{bin,json} "$M/"; done
   (cd "$WEB" && node research/test_tinydec.mjs --page test_tinytext.html --variant S --browser chromium 2>/dev/null | cut -c1-200)
 fi
+"$HERE/tiny_manifest.sh"
 ls -la "$M"
