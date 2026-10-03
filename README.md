@@ -49,6 +49,8 @@ engine.release();
 The weights are not in this repository (see the licence note). Put them under `models/tiny/`: `tiny_decoder_A.{bin,json}`
 (+ `_B`), `clip_vision.{bin,json}` (`research/tiny/export_clip_vision.py` makes it from the Xenova MobileCLIP-S0 ONNX file),
 `tiny_text_M.{bin,json}`, `tiny_scorer_S.{bin,json}`, plus VQPAINT's `palette/`, `bank/` and `mobileclip_s0/tokenizer.json`.
+Then run `research/tiny_manifest.sh`: it writes `models/tiny/manifest.json` (file → content hash); the engine fetches it fresh and
+requests every file as `name?v=<hash>`, so a retrained model reaches every device by itself and old cached copies are evicted.
 Tests: `npm install` then `node research/test_tinydec.mjs --page test_clipvision.html --browser all` (and `test_tinydec`,
 `test_tinyscorer`, `test_tinytext`, `test_engine`), `research/test_matrix.sh` for the five-profile matrix.
 
