@@ -7,24 +7,45 @@ import { ClipVisionGL } from '../lib/clipvision.js';
 import { Palette } from '../lib/palette.js';
 import { Bank } from '../lib/bank.js';
 import { fetchCached } from '../lib/models.js';
+import { TokenPainter } from './search.js';
 
-/** Low-memory model fetch for first visits: stream the response straight into Cache Storage (no JS copy), then read it back once.
- *  WebKit holds several copies of a body fetched into JS (a 22 MB file cost +77 MB plain, +134 MB with put(clone) + read). */
-export async function fetchLowMem(url, { onProgress = null, cacheName = 'vqpaint-models-v1', mirror = null } = {}) {
-  let cache = null; try { cache = await caches.open(cacheName); } catch (_) { cache = null; }
-  let tryUrls = mirror ? [url, mirror(url)].filter(Boolean) : [url];
-  if (tryUrls.length > 1 && /\/tiny\//.test(url)) tryUrls = [tryUrls[1], tryUrls[0]];   // the light engine's files live on GitHub Pages only: skip the Hugging Face round trip
+/** Model fetch that never hangs: tiny files from the mirror (GitHub Pages) first, per-attempt timeout with stall detection,
+ *  3 attempts across the URLs, streaming byte progress, Cache Storage when it works (put after the download) and plain memory
+ *  when it does not (private tabs, quota errors). `mirror` and `mirrorOf` are the same option (older callers used either name). */
+export async function fetchLowMem(url, { onProgress = null, cacheName = 'vqpaint-models-v1', mirror = null, mirrorOf = null, timeoutMs = 45000, attempts = 3, log = null } = {}) {
+  const mir = mirror || mirrorOf; const alt = mir ? mir(url) : null;
+  let urls = alt ? [url, alt] : [url];
+  if (alt && /\/tiny\//.test(url)) urls = [alt, url];               // the light engine's files live on Pages only
+  const rlog = (e) => { try { (log || globalThis.__rlog)?.({ t: 'fetch', url: e.url || url, ...e }); } catch (_) {} };
+  let cache = null;
+  if (!(globalThis.__noCache || /[?&]nocache=1/.test(typeof location !== 'undefined' ? location.search || '' : ''))) { try { cache = await caches.open(cacheName); } catch (e) { cache = null; rlog({ cache: 'unavailable', error: String(e && e.message) }); } }
   if (cache) {
-    for (const u of tryUrls) { const hit = await cache.match(u); if (hit) { const buf = await hit.arrayBuffer(); onProgress?.({ url, loaded: buf.byteLength, total: buf.byteLength, cached: true }); return buf; } }
-    for (const u of tryUrls) {
-      try { const resp = await fetch(u); if (!resp.ok) throw new Error(`fetch ${u}: ${resp.status}`); onProgress?.({ url, loaded: 0, total: +resp.headers.get('content-length') || 0, cached: false }); await cache.put(u, resp); }
-      catch (e) { if (u === tryUrls[tryUrls.length - 1]) throw e; console.warn('model host failed, trying the fallback:', e && e.message); continue; }
-      const hit = await cache.match(u); if (hit) { const buf = await hit.arrayBuffer(); onProgress?.({ url, loaded: buf.byteLength, total: buf.byteLength, cached: false }); return buf; }
+    for (const u of urls) {
+      let hit = null; try { hit = await cache.match(u); } catch (_) {}
+      if (hit) { const buf = await hit.arrayBuffer(); onProgress?.({ url, loaded: buf.byteLength, total: buf.byteLength, cached: true }); rlog({ url: u, status: 'cache', bytes: buf.byteLength, ms: 0 }); return buf; }
     }
   }
-  return fetchCached(url, { onProgress, cacheName });
+  let lastErr = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const u = urls[Math.min(attempt, urls.length - 1)], t0 = performance.now(), ac = new AbortController();
+    let stallTimer = null; const arm = () => { clearTimeout(stallTimer); stallTimer = setTimeout(() => ac.abort(), timeoutMs); };
+    try {
+      arm(); const resp = await fetch(u, { signal: ac.signal });
+      if (!resp.ok) { rlog({ url: u, status: resp.status, ms: Math.round(performance.now() - t0) }); throw new Error(`fetch ${u}: ${resp.status}`); }
+      const total = +resp.headers.get('content-length') || 0; let buf = total ? new Uint8Array(total) : null, loaded = 0; const chunks = buf ? null : [];
+      const reader = resp.body.getReader();
+      for (;;) { const { done, value } = await reader.read(); if (done) break; arm();
+        if (buf) { if (loaded + value.length > buf.length) { const big = new Uint8Array(Math.max(buf.length * 2, loaded + value.length)); big.set(buf.subarray(0, loaded)); buf = big; } buf.set(value, loaded); } else chunks.push(value);
+        loaded += value.length; onProgress?.({ url, loaded, total, cached: false }); }
+      clearTimeout(stallTimer);
+      if (!buf) { buf = new Uint8Array(loaded); let o = 0; for (const c of chunks) { buf.set(c, o); o += c.length; } } else if (loaded !== buf.length) buf = buf.slice(0, loaded);
+      rlog({ url: u, status: 200, bytes: loaded, ms: Math.round(performance.now() - t0), attempt });
+      if (cache) { try { await cache.put(u, new Response(buf, { headers: { 'Content-Type': resp.headers.get('content-type') || 'application/octet-stream', 'Content-Length': String(loaded) } })); } catch (e) { rlog({ url: u, cache: 'put failed', error: String(e && e.message) }); } }
+      return buf.buffer;
+    } catch (e) { clearTimeout(stallTimer); lastErr = e; rlog({ url: u, error: String(e && e.message), ms: Math.round(performance.now() - t0), attempt }); }
+  }
+  throw new Error(`could not load ${url.split('/').slice(-2).join('/')}: ${lastErr && lastErr.message}`);
 }
-import { TokenPainter } from './search.js';
 
 export class Engine {
   /**
@@ -33,18 +54,24 @@ export class Engine {
    */
   static async load({ base, variant = 'A', scorer = 'S', text = 'S', clip = 'clip_vision', bank = 'bank', fetchBuf = null, onProgress = null, textEncoder = null, tokenizerUrl = null, mirrorOf = null } = {}) {
     const fb = fetchBuf || ((u) => fetchLowMem(u, { onProgress, mirror: mirrorOf }));
+    const rlog = (e) => { try { globalThis.__rlog?.({ t: 'engine', ...e }); } catch (_) {} };
     // the text model files are fetched now (so they are cached and counted) but only parsed inside a worker, per note
     const textUrls = text ? { jsonUrl: base + `tiny/tiny_text_${text}.json`, binUrl: base + `tiny/tiny_text_${text}.bin`, tokenizerUrl: tokenizerUrl || base + 'mobileclip_s0/tokenizer.json', mirror: mirrorOf } : null;
     if (textUrls) { for (const u of [textUrls.tokenizerUrl, textUrls.jsonUrl, textUrls.binUrl]) await fb(u); }   // cached now; the worker reads them from Cache Storage (with the same mirror)
-    const nn = new GLNN();
+    let nn; try { nn = new GLNN(); } catch (e) { rlog({ step: 'webgl2', error: String(e && e.message) }); throw new Error('WebGL2 is not available: ' + (e && e.message)); }
+    rlog({ step: 'webgl2', renderer: nn.renderer, maxTex: nn.maxTex, maxUbo: nn.maxUbo, halfRT: nn.halfRT, extF: nn.extF, worker: typeof document === 'undefined' });
     // variant 'auto': start with A; if a 256 px decode takes more than ~60 ms on this GPU, switch to the lighter B
     const want = variant === 'auto' ? 'A' : variant;
     // one model at a time: each download buffer is released before the next one is held
     let dec = await TinyDecoderGL.load(base + `tiny/tiny_decoder_${want}.json`, base + `tiny/tiny_decoder_${want}.bin`, { fetchBuf: fb, nn });
+    rlog({ step: 'decoder', variant: want, ms: Math.round(performance.now()) });
     const sc = scorer ? await TinyScorerGL.load(base + `tiny/tiny_scorer_${scorer}.json`, base + `tiny/tiny_scorer_${scorer}.bin`, { fetchBuf: fb, nn }) : null;
+    rlog({ step: 'scorer', variant: scorer || null });
     const cv = clip ? await ClipVisionGL.load(base + `tiny/${clip}.json`, base + `tiny/${clip}.bin`, { fetchBuf: fb, nn }) : null;   // the real MobileCLIP-S0 image tower (21.7 MB fp16)
+    rlog({ step: 'clip', file: clip || null, programs: nn.programs.size });
     const palette = await Palette.load(base + 'palette/');
     const bk = bank ? await Bank.load(base + bank + '/').catch((e) => { console.warn('bank', e); return null; }) : null;
+    rlog({ step: 'data', bank: !!bk });
     if (variant === 'auto') {
       const probe = new Int32Array(256).fill(6328), ms = []; for (let i = 0; i < 4; i++) { dec.decodeRGBA(probe, 16, 16); ms.push(dec.stats.lastMs); }
       const med = ms.sort((a, b) => a - b)[2];
