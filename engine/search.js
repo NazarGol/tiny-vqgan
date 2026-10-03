@@ -115,7 +115,9 @@ export class TokenPainter {
       if (mode === 'token') { tokenEvals += cands.length; return { idx: cands.map((_, i) => i), scores: scoreBatch(cands) }; }
       if (mode === 'clip') return { idx: cands.map((_, i) => i), scores: Float32Array.from(cands, clipScore) };
       const pre = scoreBatch(cands); tokenEvals += cands.length;   // prefilter: top few by the token scorer, real CLIP decides
-      const idx = Array.from(pre.keys()).sort((a, b) => pre[b] - pre[a]).slice(0, Math.min(prefilterTop, cands.length));
+      // slow GPUs (a real-CLIP evaluation over ~120 ms): judge 2 instead of 4 per generation, so the search still moves
+      const top = this.clip.stats.lastMs > 120 ? Math.min(2, prefilterTop) : prefilterTop;
+      const idx = Array.from(pre.keys()).sort((a, b) => pre[b] - pre[a]).slice(0, Math.min(top, cands.length));
       return { idx, scores: Float32Array.from(idx, (i) => clipScore(cands[i])) };
     };
     if (this.scorer) this.scorer.setTargets([target]);
